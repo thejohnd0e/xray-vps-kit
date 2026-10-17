@@ -106,7 +106,7 @@ xvk_install_locked() (
     if [[ $XVK_SANDBOX == true ]]; then
         printf 'Testing-only file generation succeeded; no service or firewall was activated.\n'
     elif [[ $applied == true ]]; then
-        printf 'Service active on TCP %s. Check provider firewall separately; internet reachability is not proven locally.\n' "$XVK_PORT"
+        printf 'Xray-core %s installed; service active on TCP %s. Check provider firewall separately; internet reachability is not proven locally.\n' "$core_version" "$XVK_PORT"
         if [[ $XVK_RESTORE != true && $XVK_NO_FIRST != true ]]; then
             xvk_client_print_profile "${root:-/}" "$XVK_FIRST" || xvk_error "Could not print the profile; run: xray-client show $XVK_FIRST"
         fi

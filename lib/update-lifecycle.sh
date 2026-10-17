@@ -205,7 +205,7 @@ xvk_update_locked() (
     classification=$(xvk_update_candidate_status "$installed_bundle" "$installed_kit" "$installed_core" \
         "$bundle" "$kit" "$core") || exit 1
     case $classification in
-        same) printf 'Nothing to update: this checkout matches the installed kit.\n'; committed=true; exit 0 ;;
+        same) printf 'Nothing to update: kit %s, Xray-core %s is installed.\n' "$installed_kit" "$installed_core"; committed=true; exit 0 ;;
         downgrade) xvk_error 'Refusing downgrade to an older kit or core'; exit 1 ;;
         available) ;;
         *) xvk_error 'Could not classify candidate bundle'; exit 1 ;;
