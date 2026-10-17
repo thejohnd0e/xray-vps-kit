@@ -29,37 +29,47 @@ Files in this directory:
 | Network | public IPv4, TCP port open | default TCP 443; open it in the provider's firewall too |
 | Access | root | |
 
-The installer needs `jq`, `curl`, `unzip`, `openssl`, `qrencode`, `flock` (util-linux), `iproute2`,
-and `nftables` or `iptables` for the firewall check. Install them with `apt-get install -y jq curl unzip openssl qrencode iproute2 nftables`.
+The installer installs what it needs through `apt` (`jq`, `curl`, `unzip`, `openssl`, `qrencode`,
+`iproute2`, `util-linux`). The firewall check needs `nftables` or `iptables` to be present; one of
+them is on every standard Debian/Ubuntu server.
 
 ## Install on a new server
 
+Run it on the server as root, from any folder. `curl` is the only prerequisite; if it is missing,
+run `apt-get update && apt-get install -y curl` first.
+
 ```bash
-# on the server, as root:
-apt-get update && apt-get install -y git jq curl unzip openssl qrencode
-git clone https://github.com/thejohnd0e/xray-vps-kit.git
-cd xray-vps-kit
-./install.sh --first-client user_01
+curl -fsSL https://raw.githubusercontent.com/thejohnd0e/xray-vps-kit/master/install.sh | bash -s -- --first-client user_01
 ```
 
-Without options the installer asks for the port and SNI (press Enter for the defaults) and
-installs without a final confirmation. At the end it prints the first client's URI and QR code;
-to see them again later run `xray-client show user_01`. For automation add `--non-interactive`.
+The script installs `git` if needed, puts the kit in `/opt/xray-vps-kit-src` (fast-forwarding it if it
+is already there) and continues from that copy with the options you passed. Without options it asks for
+the port and SNI (press Enter for the defaults) and installs without a final confirmation. At the end it
+prints the first client's URI and QR code; to see them again later run `xray-client show user_01`.
+For automation add `--non-interactive`.
 
-**Update** (later, from the same folder; details in "Updating"):
+**Update** (fetches the latest kit and applies it; changes nothing if nothing is newer):
 
 ```bash
-cd ~/xray-vps-kit    # the folder you cloned into
-git pull
-./update.sh --check  # only report (exit 0 = up to date, 10 = update available)
-./update.sh          # apply; ./update.sh --rollback returns to the previous version
+curl -fsSL https://raw.githubusercontent.com/thejohnd0e/xray-vps-kit/master/update.sh | bash
 ```
 
-**Uninstall** (details in "Uninstall"):
+Add `-s -- --check` after `bash` to only report (exit 0 = up to date, 10 = update available) or
+`-s -- --rollback` to return to the previous version.
+
+**Uninstall** (asks for confirmation; details in "Uninstall"):
 
 ```bash
-cd ~/xray-vps-kit
-./uninstall.sh       # asks for confirmation; add --keep-config to keep keys and clients
+curl -fsSL https://raw.githubusercontent.com/thejohnd0e/xray-vps-kit/master/uninstall.sh | bash
+```
+
+Add `-s -- --keep-config` to keep keys and clients.
+
+Prefer to read the code first? Clone it and run the same scripts locally:
+
+```bash
+git clone https://github.com/thejohnd0e/xray-vps-kit.git && cd xray-vps-kit
+./install.sh --first-client user_01     # likewise ./update.sh and ./uninstall.sh
 ```
 
 | Option | Default | Meaning |
@@ -144,34 +154,34 @@ xray-client doctor
 
 ## Updating
 
-Run from the cloned repo on the server:
-
 ```bash
-cd ~/xray-vps-kit
-git pull
-./update.sh --check      # report only; exit 0 = up to date, 10 = update available
-./update.sh              # apply this checkout and its pinned Xray-core
-./update.sh --rollback   # return to the previous version
+curl -fsSL https://raw.githubusercontent.com/thejohnd0e/xray-vps-kit/master/update.sh | bash -s -- --check      # report only
+curl -fsSL https://raw.githubusercontent.com/thejohnd0e/xray-vps-kit/master/update.sh | bash                    # apply
+curl -fsSL https://raw.githubusercontent.com/thejohnd0e/xray-vps-kit/master/update.sh | bash -s -- --rollback   # previous version
 ```
 
-`update.sh` applies the checkout you have on disk: it never fetches code by itself, so
-review what `git pull` brought in before running it. The Xray-core version is the one pinned
-in `releases/xray.lock.json`, checked against its SHA256 before use. Keys and clients are
-kept. If the new version fails to start, the previous one is restored automatically.
-`--rollback` returns to the previous version, but is refused once clients were added or
-removed after the update (to avoid losing those changes).
+`--check` exits 0 when up to date and 10 when an update is available.
+
+The one-liner fast-forwards `/opt/xray-vps-kit-src` to the latest `master` and applies that code,
+so you are trusting what is on GitHub at that moment. To review first, `cd /opt/xray-vps-kit-src`,
+`git pull`, read `git log -p`, then run `./update.sh` from there (or from your own clone).
+The Xray-core version is the one pinned in `releases/xray.lock.json`, checked against its SHA256
+before use. Keys and clients are kept. If the new version fails to start, the previous one is
+restored automatically. `--rollback` returns to the previous version, but is refused once clients
+were added or removed after the update (to avoid losing those changes).
 
 ## Uninstall
 
 ```bash
-./uninstall.sh                 # asks for confirmation (--yes for automation)
-./uninstall.sh --keep-config   # keep keys and clients for a later install.sh --restore
+curl -fsSL https://raw.githubusercontent.com/thejohnd0e/xray-vps-kit/master/uninstall.sh | bash                      # asks for confirmation
+curl -fsSL https://raw.githubusercontent.com/thejohnd0e/xray-vps-kit/master/uninstall.sh | bash -s -- --keep-config  # keep keys and clients
 ```
 
-Removes the service, launcher, installed code, the owned firewall rule and (without
-`--keep-config`) config, keys and backups. Anything it cannot prove it created is left
-alone, and the whole removal is refused if installed files were modified. The
-`xray-vps-kit` user and installed apt packages are left in place.
+`--yes` skips the confirmation; `--keep-config` keeps keys and clients for a later `install.sh --restore`.
+Removes the service, launcher, installed code, the owned firewall rule and (without `--keep-config`)
+config, keys and backups. Anything it cannot prove it created is left alone, and the whole removal is
+refused if installed files were modified. The `xray-vps-kit` user, installed apt packages and the
+downloaded kit copy `/opt/xray-vps-kit-src` are left in place (`rm -rf /opt/xray-vps-kit-src` removes it).
 
 ## Privacy and secrets
 

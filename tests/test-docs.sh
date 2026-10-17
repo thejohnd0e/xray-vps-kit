@@ -113,6 +113,14 @@ docs_all() {
 if [[ $selected == all || $selected == documented-lifecycle-and-links ]]; then
     assert_success 'README and the extension note have valid links, real flags and no unbacked claims' docs_all "${docs_files[@]}"
 
+    # Every one-liner points at a script this repository ships, on the default branch.
+    urls=$(grep -oE 'raw\.githubusercontent\.com/thejohnd0e/xray-vps-kit/[^ |]+' "$PROJECT_DIR/README.md" | sort -u)
+    assert_success 'README one-liners exist' test -n "$urls"
+    for url in $urls; do
+        assert_eq master "$(cut -d/ -f4 <<< "$url")" "one-liner uses the master branch: ${url##*/}"
+        assert_success "one-liner script exists: ${url##*/}" test -f "$PROJECT_DIR/${url##*/}"
+    done
+
     # Each verb the README shows for xray-client is in the tool's own help.
     help=$(bash "$PROJECT_DIR/xray-client" help)
     verbs=$(grep -oE '^xray-client [a-z]+' "$PROJECT_DIR/README.md" | awk '{print $2}' | sort -u)
