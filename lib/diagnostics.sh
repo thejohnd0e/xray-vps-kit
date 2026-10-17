@@ -15,6 +15,20 @@ xvk_client_show_qr() {
     printf '%s' "$uri" | qrencode -t ANSIUTF8
 }
 
+# Prints the URI and its QR code, the profile a person imports into a client app.
+xvk_client_print_profile() {
+    local root=${1%/} name=${2:-} cfg uri
+    cfg="${root%/}/etc/xray-vps-kit"
+    uri=$(xvk_render_uri "$cfg/state.json" "$name") || { xvk_error 'No such client'; return 1; }
+    printf 'Client %s
+URI:
+%s
+
+QR code:
+' "$name" "$uri"
+    xvk_client_show_qr "$root" "$name"
+}
+
 xvk_client_export() {
     local root=${1%/} name=${2:-} output=${3:-} cfg uri
     cfg="${root%/}/etc/xray-vps-kit"

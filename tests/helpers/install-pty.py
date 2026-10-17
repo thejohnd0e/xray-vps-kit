@@ -91,35 +91,35 @@ def main() -> None:
     if run_happy:
         root, arguments = command()
         code, _ = dialogue(arguments, [(b"Xray TCP port", b"\n"), (b"REALITY SNI", b"\n"),
-                                      (b"First client name", b"\n"), (b"Proceed with installation?", b"y\n")])
+                                      (b"First client name", b"\n")])
         assert code == 0, "interactive defaults failed"
         state = json.loads((root / "etc/xray-vps-kit/state.json").read_text())
         assert state["port"] == 443 and state["target"] == "github.com:443"
         assert [client["name"] for client in state["clients"]] == ["main-user"]
         root, arguments = command()
         arguments += ["--port", "8443", "--server-name", "github.com", "--first-client", "tablet"]
-        code, output = dialogue(arguments, [(b"Proceed with installation?", b"y\n")])
+        code, output = dialogue(arguments, [])
         assert code == 0 and b"Xray TCP port [" not in output and b"First client name [" not in output
         state = json.loads((root / "etc/xray-vps-kit/state.json").read_text())
         assert state["port"] == 8443 and state["target"] == "github.com:443"
         assert [client["name"] for client in state["clients"]] == ["tablet"]
         root, arguments = command()
         code, output = dialogue(arguments + ["--port", "8443"], [(b"REALITY SNI", b"\n"),
-                                (b"First client name", b"reader\n"), (b"Proceed with installation?", b"y\n")])
+                                (b"First client name", b"reader\n")])
         assert code == 0 and b"Xray TCP port [" not in output
         state = json.loads((root / "etc/xray-vps-kit/state.json").read_text())
         assert state["port"] == 8443 and state["clients"][0]["name"] == "reader"
         root, arguments = command()
         code, output = dialogue(arguments + ["--no-first-client"], [(b"Xray TCP port", b"\n"),
-                               (b"REALITY SNI", b"\n"), (b"Proceed with installation?", b"y\n")])
+                               (b"REALITY SNI", b"\n")])
         assert code == 0 and b"First client name [" not in output
         state = json.loads((root / "etc/xray-vps-kit/state.json").read_text())
         assert state["clients"] == []
     if run_negative:
         root, arguments = command()
         code, _ = dialogue(arguments, [(b"Xray TCP port", b"\n"), (b"REALITY SNI", b"\n"),
-                                      (b"First client name", b"\n"), (b"Proceed with installation?", b"n\n")])
-        assert code != 0 and not list(root.iterdir()), "cancel mutated the root"
+                                      (b"First client name", b"\x03")])
+        assert code != 0 and not list(root.iterdir()), "interrupt at the last prompt mutated the root"
         root, arguments = command()
         code, _ = dialogue(arguments, [(b"Xray TCP port", b"\x04")])
         assert code != 0 and not list(root.iterdir()), "EOF mutated the root"
@@ -129,9 +129,10 @@ def main() -> None:
         root, arguments = command()
         code, _ = dialogue(arguments, [(b"Xray TCP port", b"0\n"), (b"Xray TCP port", b"8443\n"),
                                       (b"REALITY SNI", b"bad/host\n"), (b"REALITY SNI", b"github.com\n"),
-                                      (b"First client name", b"../bad\n"), (b"First client name", b"reader\n"),
-                                      (b"Proceed with installation?", b"n\n")])
-        assert code != 0 and not list(root.iterdir()), "invalid/retry/cancel flow mutated the root"
+                                      (b"First client name", b"../bad\n"), (b"First client name", b"reader\n")])
+        assert code == 0, "invalid/retry flow failed"
+        state = json.loads((root / "etc/xray-vps-kit/state.json").read_text())
+        assert state["port"] == 8443 and state["clients"][0]["name"] == "reader"
 
 
 if __name__ == "__main__":

@@ -42,7 +42,7 @@ cd xray-vps-kit
 ./install.sh --first-client user_01
 ```
 
-Without options the installer asks for the values interactively. For automation add
+Without options the installer asks for the port and SNI (press Enter for the defaults) and installs without a final confirmation. For automation add
 `--non-interactive`.
 
 **Update** (later, from the same folder; details in "Updating"):

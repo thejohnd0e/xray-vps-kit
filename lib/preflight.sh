@@ -104,9 +104,4 @@ xvk_install_preflight() {
     [[ $XVK_NO_FIRST != true ]] || value=none
     [[ $XVK_RESTORE != true ]] || value='preserved identities'
     printf 'Endpoint: %s:%s\nTransport: VLESS/TCP/REALITY/Vision\nSNI: %s\nTarget: %s\nFirst client: %s\n' "$XVK_ENDPOINT" "$XVK_PORT" "$XVK_SNI" "$XVK_TARGET" "$value"
-    if [[ $XVK_AUTOMATION != true ]]; then
-        printf 'Proceed with installation? [y/N]: ' >&2
-        IFS= read -r value || return 1
-        case $value in y|Y|yes|YES) ;; *) xvk_error 'Installation canceled'; return 1 ;; esac
-    fi
 }

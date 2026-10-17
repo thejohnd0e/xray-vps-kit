@@ -49,7 +49,7 @@ case ${1:-help} in
     add)
         (( $# == 2 )) || { usage >&2; exit 1; }
         root=$(management_root) || exit 1
-        xvk_client_add "$root" "$2" ;;
+        xvk_client_mutate "$root" add "$2" && xvk_client_print_profile "$root" "$2" ;;
     remove)
         (( $# == 2 )) || { usage >&2; exit 1; }
         root=$(management_root) || exit 1

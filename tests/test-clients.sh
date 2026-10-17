@@ -17,6 +17,10 @@ config="$root/etc/xray-vps-kit/config.json"
 if [[ $selected != failed-add-and-remove ]]; then
     assert_success 'add phone commits and exports a profile' bash "$manager" add phone
     assert_success 'add tablet survives fresh process state load' bash "$manager" add tablet
+    bash "$manager" add printed > "$scratch/add-output"
+    assert_success 'add prints the URI and a QR code' grep -q -e '^vless://' -e '^QR code:' "$scratch/add-output"
+    assert_eq 2 "$(grep -c -e '^vless://' -e '^QR code:' "$scratch/add-output")" 'add output has both the URI and the QR heading'
+    bash "$manager" remove printed
     assert_eq 'main-user,phone,tablet' "$(bash "$manager" list | LC_ALL=C sort | paste -sd ,)" 'list contains only client names'
     bash "$manager" show phone --uri > "$scratch/profile"
     jq '.clients |= map(select(.name=="phone"))' "$state" > "$scratch/selected-state.json"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 project=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
-for module in common state release render ownership transaction bundle service firewall install-options preflight install-cleanup install-lifecycle; do
+for module in common state release render ownership transaction bundle service firewall clients diagnostics install-options preflight install-cleanup install-lifecycle; do
     # shellcheck source=/dev/null
     source "$project/lib/$module.sh"
 done
