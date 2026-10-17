@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax check
+        run: |
+          for f in install.sh update.sh uninstall.sh xray-client lib/*.sh tests/*.sh tests/helpers/*.sh tests/fixtures/harness/*.sh; do
+            bash -n "$f"
+          done
+      - name: ShellCheck
+        run: shellcheck install.sh update.sh uninstall.sh xray-client lib/*.sh tests/*.sh tests/helpers/*.sh tests/fixtures/harness/*.sh
+
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq curl unzip openssl qrencode zbar-tools iproute2 python3
+      - name: Sandbox suites
+        run: |
+          for suite in harness validation release render transaction install clients export-doctor update uninstall coexistence; do
+            bash tests/run.sh --suite "$suite"
+          done
+      - name: Real REALITY traffic (network namespace)
+        run: sudo env "PATH=$PATH" bash tests/run.sh --suite e2e
