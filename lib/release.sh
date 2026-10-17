@@ -98,6 +98,8 @@ xvk_release_acquire() (
     else
         temporary=$(xvk_private_temp "$cache") || exit 1
         trap 'rm -f -- "$temporary"' EXIT
+        printf 'Downloading %s from github.com (about 20 MB; waits up to 3 minutes per attempt)...
+' "$name" >&2
         xvk_https_get "$url" "$temporary" || exit 1
         xvk_verify_sha256 "$temporary" "$expected" || { xvk_error 'Downloaded archive mismatch'; exit 1; }
         # noclobber publishing: concurrent cache writers cannot replace data.
