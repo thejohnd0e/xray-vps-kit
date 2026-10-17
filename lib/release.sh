@@ -20,7 +20,10 @@ xvk_release_validate_lock() {
 xvk_https_get() {
     # Both the initial URL and redirects must remain HTTPS. This does not
     # replace the archive checksum check performed before every extraction.
-    curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
+    # A progress bar only on a terminal; logs and pipes stay quiet.
+    local quiet=(--silent --show-error)
+    [[ ! -t 2 ]] || quiet=(--progress-bar)
+    curl --fail "${quiet[@]}" --location --proto '=https' --proto-redir '=https' \
         --connect-timeout 10 --max-time 180 --retry 2 --retry-max-time 360 \
         --output "$2" "$1"
 }
@@ -98,7 +101,7 @@ xvk_release_acquire() (
     else
         temporary=$(xvk_private_temp "$cache") || exit 1
         trap 'rm -f -- "$temporary"' EXIT
-        printf 'Downloading %s from github.com (about 20 MB; waits up to 3 minutes per attempt)...
+        printf 'Downloading %s from github.com (about 20 MB)...
 ' "$name" >&2
         xvk_https_get "$url" "$temporary" || exit 1
         xvk_verify_sha256 "$temporary" "$expected" || { xvk_error 'Downloaded archive mismatch'; exit 1; }
