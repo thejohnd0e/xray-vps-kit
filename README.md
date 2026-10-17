@@ -1,9 +1,12 @@
 # Xray VPS Kit
 [![CI](https://github.com/thejohnd0e/xray-vps-kit/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/thejohnd0e/xray-vps-kit/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/github/license/thejohnd0e/xray-vps-kit)](LICENSE) ![Shell](https://img.shields.io/badge/shell-bash-4EAA25?logo=gnubash&logoColor=white) ![Platform](https://img.shields.io/badge/platform-Debian%20%7C%20Ubuntu-A81D33?logo=debian&logoColor=white) ![Protocol](https://img.shields.io/badge/protocol-VLESS%20%2B%20REALITY%20%2B%20Vision%20(TCP)-blue)
 
+> **Complementary solutions:** [awg-vps-kit](https://github.com/thejohnd0e/awg-vps-kit) (AmneziaWG over UDP)
+> and this kit (VLESS + REALITY over TCP) are two independent tools for the same job. Use either one, or
+> both on the same server; see "AWG or Xray?" below.
+
 Xray-core (VLESS + REALITY + XTLS Vision) on TCP 443 and the `xray-client` command to
-manage clients. Companion to [awg-vps-kit](https://github.com/thejohnd0e/awg-vps-kit):
-AmneziaWG uses UDP, this kit uses TCP, and both can live on the same server.
+manage clients.
 
 Files in this directory:
 
