@@ -104,7 +104,7 @@ Run as root.
 xray-client help                         # short help
 xray-client add <name>                   # create a client, print URI + QR code
 xray-client list                         # clients
-xray-client show <name>                  # QR code
+xray-client show <name>                  # URI + QR code again
 xray-client show <name> --uri            # URI as text
 xray-client export <name> --output FILE  # URI to a file with mode 0600
 xray-client remove <name>                # revoke a client

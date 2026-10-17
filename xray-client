@@ -16,7 +16,7 @@ xray-client: manage VLESS + REALITY clients (run as root)
 
   xray-client add NAME                    create a client, print its URI and QR code
   xray-client list                        list clients
-  xray-client show NAME                   print the QR code again
+  xray-client show NAME                   print the URI and QR code again
   xray-client show NAME --uri             print the URI as text
   xray-client export NAME --output FILE   write the URI to FILE (mode 0600)
   xray-client remove NAME                 revoke a client; that device disconnects
@@ -62,7 +62,7 @@ case ${1:-help} in
         (( $# == 2 || $# == 3 )) || { usage >&2; exit 1; }
         root=$(management_root) || exit 1
         case ${3:-} in
-            '') xvk_client_show_qr "$root" "$2" ;;
+            '') xvk_client_print_profile "$root" "$2" ;;
             --uri) xvk_client_show "$root" "$2" --uri ;;
             *) usage >&2; exit 1 ;;
         esac ;;

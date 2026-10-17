@@ -34,6 +34,7 @@ QR
     assert_eq 600 "$(stat -c %a "$scratch/export")" 'export mode is0600'
     assert_success 'URI and exported bytes match exactly including LF' cmp -s "$scratch/uri" "$scratch/export"
     PATH="$scratch/qr-bin:$PATH" bash "$manager" show main-user > "$scratch/terminal"
+    assert_success 'show prints the URI and the QR heading' grep -q -e '^vless://' -e '^QR code:' "$scratch/terminal"
     zbarimg --quiet --raw "$scratch/qr.png" > "$scratch/decoded" 2>/dev/null
     assert_success 'real QR decodes to the exact same URI' cmp -s "$scratch/uri" "$scratch/decoded"
     printf '%s' "$(cat "$scratch/uri")" > "$scratch/without-lf"
