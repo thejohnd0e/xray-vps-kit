@@ -29,10 +29,13 @@ jobs:
         os: [ubuntu-22.04, ubuntu-24.04]
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - name: Install test dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y jq curl unzip openssl qrencode zbar-tools iproute2 python3
+          sudo apt-get install -y jq curl unzip openssl qrencode zbar-tools iproute2
       - name: Sandbox suites
         run: |
           for suite in harness validation release render transaction install clients export-doctor update uninstall coexistence; do
