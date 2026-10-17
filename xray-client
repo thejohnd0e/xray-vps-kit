@@ -10,6 +10,24 @@ usage() {
     printf 'Usage: xray-client help|version|add NAME|list|show NAME [--uri]|export NAME --output FILE|remove NAME|doctor\n'
 }
 
+help_text() {
+    cat <<'HELP'
+xray-client: manage VLESS + REALITY clients (run as root)
+
+  xray-client add NAME                    create a client, print its URI and QR code
+  xray-client list                        list clients
+  xray-client show NAME                   print the QR code again
+  xray-client show NAME --uri             print the URI as text
+  xray-client export NAME --output FILE   write the URI to FILE (mode 0600)
+  xray-client remove NAME                 revoke a client; that device disconnects
+  xray-client doctor                      health report (never prints keys, UUIDs or URIs)
+  xray-client version                     kit and Xray-core versions
+  xray-client help                        this text
+
+NAME: letters, digits, _ and -. One client per device is recommended.
+HELP
+}
+
 management_root() {
     local root
     root=$(xvk_client_root_from_bundle "$bundle") || {
@@ -22,7 +40,7 @@ management_root() {
 case ${1:-help} in
     help|--help)
         (( $# <= 1 )) || { usage >&2; exit 1; }
-        usage ;;
+        help_text ;;
     version)
         (( $# == 1 )) || exit 1
         xvk_require_commands jq || exit 1
