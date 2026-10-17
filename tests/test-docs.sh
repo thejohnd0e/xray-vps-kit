@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
+# Backticks in the fixtures are Markdown, not command substitution.
+# shellcheck disable=SC2016
 case "${1:-all}" in
-    all|documented-lifecycle-and-links|stale-command-and-cdn-claim) selected=${1:-all} ;;
+    all|documented-lifecycle-and-links|stale-command-and-cdn-claim|evidence-claim-mismatch) selected=${1:-all} ;;
     *) printf 'Unknown docs case\n' >&2; exit 1 ;;
 esac
 # Documentation must describe what the code does. The checks below are plain functions
@@ -68,6 +70,33 @@ docs_claims() {
     if grep -qE 'vless://[^ ]*@' "$file"; then
         printf 'concrete client URI in %s\n' "${file##*/}" >&2; status=1
     fi
+    return "$status"
+}
+
+# Evidence receipts: every receipt an index names must exist and be non-empty.
+docs_receipts() {
+    local index=$1 dir=$2 receipt status=0
+    while IFS= read -r receipt; do
+        [[ -s $dir/$receipt ]] || { printf 'missing or empty receipt: %s
+' "$receipt" >&2; status=1; }
+    done < <(grep -oE '`[A-Za-z0-9._-]+\.(txt|md|jsonl)`' "$index" | tr -d '`' | sort -u)
+    return "$status"
+}
+
+# A line that says arm64 (or a physical-app test) was verified needs a matching receipt.
+docs_verified_claims() {
+    local file=$1 dir=$2 line status=0
+    while IFS= read -r line; do
+        grep -qiE '(^|[^a-z])(no|not|never|nothing|without|only|unverified)([^a-z]|$)' <<< "$line" && continue
+        if grep -qi 'arm64' <<< "$line" && ! compgen -G "$dir/*arm64*" > /dev/null; then
+            printf 'arm64 claimed verified without a receipt: %s
+' "$line" >&2; status=1
+        fi
+        if grep -qiE 'physical|nekobox|v2rayn|hiddify' <<< "$line" && ! compgen -G "$dir/*physical*" > /dev/null; then
+            printf 'physical-app test claimed without a receipt: %s
+' "$line" >&2; status=1
+        fi
+    done < <(grep -iE 'verified|passes|passed|tested' "$file" || true)
     return "$status"
 }
 
@@ -145,7 +174,6 @@ if [[ $selected == all || $selected == stale-command-and-cdn-claim ]]; then
     negative 'nonexistent flag' docs_flags '```bash
 ./install.sh --cdn cloudflare
 ```'
-    # shellcheck disable=SC2016
     negative 'removed flag still documented' docs_flags 'Run `xray-client show NAME --uri` to print the link.'
     negative 'live CDN claim' docs_claims 'Cloudflare CDN mode is available now: enable it during install.'
     negative 'blanket compatibility claim' docs_claims 'This setup works with all clients and is undetectable.'
@@ -153,4 +181,43 @@ if [[ $selected == all || $selected == stale-command-and-cdn-claim ]]; then
     negative 'identity-like UUID' docs_claims 'Example id: 5b619b82-c3be-4c5a-9bce-0c00be17db88'
     negative 'concrete client URI' docs_claims 'vless://user@example.com:443?security=reality'
     negative 'broken link' docs_links 'See [the guide](docs/missing-guide.md).'
+fi
+
+if [[ $selected == all || $selected == evidence-claim-mismatch ]]; then
+    evidence="$scratch/evidence"
+    mkdir -p "$evidence"
+    printf 'real receipt
+' > "$evidence/task-1-happy.txt"
+    : > "$evidence/empty.txt"
+    printf '| 1 | `task-1-happy.txt` |
+' > "$scratch/good-index.md"
+    printf '| 1 | `task-1-happy.txt` |
+| 2 | `task-2-happy.txt` |
+' > "$scratch/missing-index.md"
+    printf '| 3 | `empty.txt` |
+' > "$scratch/empty-index.md"
+    assert_success 'an index whose receipts exist is accepted' docs_receipts "$scratch/good-index.md" "$evidence"
+    assert_failure 'a missing mandatory receipt blocks the success claim' docs_receipts "$scratch/missing-index.md" "$evidence"
+    assert_failure 'an empty receipt blocks the success claim' docs_receipts "$scratch/empty-index.md" "$evidence"
+    printf 'Native arm64 service smoke is verified on a real host.
+' > "$scratch/claim-arm64.md"
+    printf 'Hiddify import was tested on a phone.
+' > "$scratch/claim-physical.md"
+    printf 'Native arm64 is not tested yet; only the archive digest is checked.
+' > "$scratch/limitation.md"
+    assert_failure 'arm64 verified without a receipt is rejected' docs_verified_claims "$scratch/claim-arm64.md" "$evidence"
+    assert_failure 'a physical-app claim without a receipt is rejected' docs_verified_claims "$scratch/claim-physical.md" "$evidence"
+    assert_success 'a stated limitation is accepted' docs_verified_claims "$scratch/limitation.md" "$evidence"
+    printf 'arm64 smoke receipt
+' > "$evidence/task-arm64.txt"
+    assert_success 'the same arm64 claim passes once its receipt exists' docs_verified_claims "$scratch/claim-arm64.md" "$evidence"
+    assert_success 'the README keeps its limitations and claims nothing unreceipted'         docs_verified_claims "$PROJECT_DIR/README.md" "$scratch/no-receipts"
+    # The project's own index is checked only where the (git-ignored) evidence directory exists.
+    real_evidence="$PROJECT_DIR/.omo/evidence/xray-companion-kit"
+    if [[ -f $real_evidence/index.md ]]; then
+        assert_success 'every receipt in the real evidence index exists' docs_receipts "$real_evidence/index.md" "$real_evidence"
+    else
+        printf '# real evidence index not present in this checkout; synthetic cases only
+'
+    fi
 fi
