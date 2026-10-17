@@ -1,0 +1,23 @@
+diff --git a/README.md b/README.md
+index 07a352a..60aa6c3 100644
+--- a/README.md
++++ b/README.md
+@@ -197,6 +197,18 @@ iperf3 -c SERVER -R -u -b 100M   # UDP download: look at "Lost/Total"
+   go faster but needs headers and DKMS.
+ - Port 443/udp does not conflict with an xray/3x-ui listening on 443/tcp.
+ 
++## Companion: xray-vps-kit
++
++If UDP is blocked or filtered on your network, there is a separate, independent kit for
++VLESS + REALITY + Vision over TCP: [xray-vps-kit](https://github.com/thejohnd0e/xray-vps-kit).
++It has its own installer and client manager, does not touch AWG files, and both can run on
++one server (AWG on UDP 443, Xray on TCP 443).
++
++| | awg-vps-kit (this) | xray-vps-kit |
++|---|---|---|
++| Transport | AmneziaWG over UDP | VLESS + REALITY + Vision over TCP |
++| Management command | `awg-client` | `xray-client` |
++
+ ## Development and testing
+ 
+ Pure Bash, no build step. Check syntax with `bash -n install.sh awg-client` (and

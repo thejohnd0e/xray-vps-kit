@@ -85,7 +85,22 @@ What the installer does:
    it refuses to continue if other firewall rules would block the port in a way it cannot judge;
 5. starts `xray-vps-kit.service` and prints the first client's URI and QR code.
 
-If the provider has a cloud firewall / security group, open the TCP port there yourself.
+If the provider has a cloud firewall / security group, open the TCP port there yourself: the
+installer only manages the server's own UFW and cannot see the provider's. Without `ufw` it
+opens nothing and only checks that no other local rule would block the port.
+
+### Two different "443"s
+
+- `--port` is the **local listen port** on your server, the one clients connect to.
+- `--target` (default `<SNI>:443`) is the **remote site** that REALITY imitates; the server
+  contacts it during the handshake. It is unrelated to your own port 443 and is checked
+  (TLS 1.3, h2) before anything is installed. `--server-name` is the SNI clients present.
+
+### Restore and `--no-first-client`
+
+`--no-first-client` installs with no identities; add them later with `xray-client add`.
+`--restore` (after `uninstall.sh --keep-config`) recreates the service from the preserved
+keys and clients; it does **not** create a new `main-user`, and the old profiles keep working.
 
 ## Layout on the server
 
@@ -112,11 +127,12 @@ xray-client doctor                       # health report (never prints keys, UUI
 xray-client version                      # kit and Xray-core versions
 ```
 
-- One identity = one device is recommended; revoking a client disconnects it.
-- Changes are applied atomically and the service is restarted; on failure the previous
-  config is restored.
-- Import the URI (or scan the QR code) in any VLESS + REALITY client (v2rayN, v2rayNG,
-  Streisand, Hiddify, Shadowrocket, and others).
+- Names: letters, digits, `_` and `-`. One identity = one device is recommended.
+- `add` and `remove` change the config atomically and **restart the service**, so every
+  connected client drops for a moment and reconnects. On failure the previous config is
+  restored. Removing a client disconnects that device for good.
+- Import the URI (or scan the QR code) in a VLESS + REALITY client. See
+  "Client compatibility" for what has and has not been tested.
 
 ## Service and diagnostics
 
@@ -138,8 +154,12 @@ git pull
 ./update.sh --rollback   # return to the previous version
 ```
 
-Keys and clients are kept. If the new version fails to start, the previous one is
-restored automatically.
+`update.sh` applies the checkout you have on disk: it never fetches code by itself, so
+review what `git pull` brought in before running it. The Xray-core version is the one pinned
+in `releases/xray.lock.json`, checked against its SHA256 before use. Keys and clients are
+kept. If the new version fails to start, the previous one is restored automatically.
+`--rollback` returns to the previous version, but is refused once clients were added or
+removed after the update (to avoid losing those changes).
 
 ## Uninstall
 
@@ -153,6 +173,43 @@ Removes the service, launcher, installed code, the owned firewall rule and (with
 alone, and the whole removal is refused if installed files were modified. The
 `xray-vps-kit` user and installed apt packages are left in place.
 
+## Privacy and secrets
+
+- A client URI contains the client's UUID and the server's REALITY public key. Treat it as
+  a password: anyone holding it can use your server.
+- State, config and ownership files are root-only (mode 0600/0640); `export` creates its
+  file with mode 0600 and refuses to overwrite.
+- `xray-client doctor` never prints keys, UUIDs or URIs, so its output is safe to share.
+- The service runs as the unprivileged `xray-vps-kit` user.
+
+## Client compatibility
+
+The URI is a standard `vless://` link with REALITY and Vision parameters. What has been
+verified is separated here on purpose:
+
+| Check | Result |
+|---|---|
+| URI parsed by an independent parser against the stored identity | passes |
+| QR code decodes to exactly the same URI | passes |
+| Real pinned Xray-core connects from an exported URI, reaches a test origin, and is refused after revocation | passes |
+| v2rayN, v2rayNG, Streisand, Hiddify, Shadowrocket and other apps | **not tested**; check that your app supports VLESS + REALITY + `xtls-rprx-vision` |
+
+There is no guarantee that every client works.
+
+## AWG or Xray?
+
+They solve different problems and are managed separately (no shared commands, no automatic
+switching):
+
+| | awg-vps-kit | xray-vps-kit |
+|---|---|---|
+| Transport | AmneziaWG over UDP | VLESS + REALITY + Vision over TCP |
+| Typical reason to pick it | the network throttles inbound TCP from foreign hosting | UDP is blocked or filtered, or you need per-client URIs for common apps |
+| Server port | UDP 443 | TCP 443 |
+
+Both can run on one server. Measure your own path before choosing (for example with `iperf3`
+over TCP and UDP): this project makes no speed claims.
+
 ## Coexistence with awg-vps-kit
 
 The kit does not touch AmneziaWG files, units, nft tables, sysctl or UFW rules.
@@ -161,14 +218,27 @@ fixture (files, UDP echo service, nft table, UFW rules) that stays byte-identica
 through the whole install / update / rollback / uninstall cycle. A real AWG handshake
 is not part of that test.
 
+## What is not measured or verified
+
+- Throughput, latency, RAM and disk use: not measured, so no minimums beyond the table above.
+- Native arm64: only the pinned archive and rendering are checked, not a running service.
+- Reachability from the internet and from physical client apps: not tested.
+- Blocking resistance: no claim is made.
+
+## Future CDN transport
+
+Not implemented. A CDN-fronted mode would be a separate deployment; the design boundaries
+are written down in [docs/transport-extension.md](docs/transport-extension.md).
+
 ## Development and testing
 
 Pure Bash plus `jq`, no build step. Python 3 is used only by test helpers.
 
 ```bash
 bash tests/run.sh --suite validation      # also: harness release render transaction install
-                                          #       clients export-doctor update uninstall coexistence
+                                          #       clients export-doctor update uninstall coexistence docs
 sudo bash tests/run.sh --suite e2e        # real REALITY traffic; root + netns, use a disposable VM
+bash tests/run.sh --suite docs            # README commands, flags, links, claims
 shellcheck *.sh xray-client lib/*.sh tests/*.sh tests/helpers/*.sh
 ```
 
