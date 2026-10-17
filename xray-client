@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+set -euo pipefail
+bundle=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+for module in common state render ownership transaction service clients diagnostics; do
+    # shellcheck source=/dev/null
+    source "$bundle/lib/$module.sh"
+done
+
+usage() {
+    printf 'Usage: xray-client help|version|add NAME|list|show NAME [--uri]|export NAME --output FILE|remove NAME|doctor\n'
+}
+
+management_root() {
+    local root
+    root=$(xvk_client_root_from_bundle "$bundle") || {
+        xvk_error 'Management commands require an installed kit'; return 1;
+    }
+    xvk_require_commands jq || return 1
+    printf '%s\n' "${root:-/}"
+}
+
+case ${1:-help} in
+    help|--help)
+        (( $# <= 1 )) || { usage >&2; exit 1; }
+        usage ;;
+    version)
+        (( $# == 1 )) || exit 1
+        xvk_require_commands jq || exit 1
+        printf 'xray-vps-kit %s; core %s\n' \
+            "$(cat "$bundle/VERSION")" "$(jq -r .version "$bundle/releases/xray.lock.json")" ;;
+    add)
+        (( $# == 2 )) || { usage >&2; exit 1; }
+        root=$(management_root) || exit 1
+        xvk_client_add "$root" "$2" ;;
+    remove)
+        (( $# == 2 )) || { usage >&2; exit 1; }
+        root=$(management_root) || exit 1
+        xvk_client_remove "$root" "$2" ;;
+    list)
+        (( $# == 1 )) || { usage >&2; exit 1; }
+        root=$(management_root) || exit 1
+        xvk_client_list "$root" ;;
+    show)
+        (( $# == 2 || $# == 3 )) || { usage >&2; exit 1; }
+        root=$(management_root) || exit 1
+        case ${3:-} in
+            '') xvk_client_show_qr "$root" "$2" ;;
+            --uri) xvk_client_show "$root" "$2" --uri ;;
+            *) usage >&2; exit 1 ;;
+        esac ;;
+    export)
+        if (( $# != 4 )) || [[ $3 != --output ]]; then usage >&2; exit 1; fi
+        root=$(management_root) || exit 1
+        xvk_client_export "$root" "$2" "$4" ;;
+    doctor)
+        (( $# == 1 )) || { usage >&2; exit 1; }
+        root=$(management_root) || exit 1
+        xvk_client_doctor "$root" ;;
+    *) usage >&2; exit 1 ;;
+esac

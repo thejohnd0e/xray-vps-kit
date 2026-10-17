@@ -1,0 +1,27 @@
+# Local secrets and environment configuration
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Operating-system metadata
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local test caches, transcripts and ephemeral credentials (not source fixtures)
+/.omo/evidence/
+/.omo/cache/
+/tests/.cache/
+/tests/.tmp/
+/test-results/
+*.deb
+
+# Agent/working files, kept locally only
+/AGENTS.md
+/CLAUDE.md
+/STATUS.md
+/DECISIONS.md
+/TODO.md
+/.omo/
+/pyrightconfig.json
