@@ -42,15 +42,16 @@ cd xray-vps-kit
 ./install.sh --first-client user_01
 ```
 
-Without options the installer asks for the port and SNI (press Enter for the defaults) and installs without a final confirmation. For automation add
-`--non-interactive`.
+Without options the installer asks for the port and SNI (press Enter for the defaults) and
+installs without a final confirmation. At the end it prints the first client's URI and QR code;
+to see them again later run `xray-client show user_01`. For automation add `--non-interactive`.
 
 **Update** (later, from the same folder; details in "Updating"):
 
 ```bash
 cd ~/xray-vps-kit    # the folder you cloned into
 git pull
-./update.sh --check  # only report
+./update.sh --check  # only report (exit 0 = up to date, 10 = update available)
 ./update.sh          # apply; ./update.sh --rollback returns to the previous version
 ```
 
@@ -102,10 +103,10 @@ Run as root.
 
 ```bash
 xray-client help                         # short help
-xray-client add <name>                   # create a client, print URI + QR code
+xray-client add <name>                   # create a client, print its URI + QR code
 xray-client list                         # clients
-xray-client show <name>                  # URI + QR code again
-xray-client export <name> --output FILE  # URI to a file with mode 0600
+xray-client show <name>                  # print the URI + QR code of an existing client
+xray-client export <name> --output FILE  # URI only, to a new file with mode 0600
 xray-client remove <name>                # revoke a client
 xray-client doctor                       # health report (never prints keys, UUIDs or URIs)
 xray-client version                      # kit and Xray-core versions
