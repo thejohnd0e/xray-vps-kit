@@ -114,7 +114,7 @@ fetch_via() {
     return "$status"
 }
 
-uri_of() { bash "$manager" show "$1" --uri; }
+uri_of() { bash "$manager" show "$1" | grep '^vless://'; }
 expect_body() { printf '%s-%s\n' "$1" "$token"; }
 
 setup_namespace

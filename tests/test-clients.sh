@@ -22,7 +22,7 @@ if [[ $selected != failed-add-and-remove ]]; then
     assert_eq 2 "$(grep -c -e '^vless://' -e '^QR code:' "$scratch/add-output")" 'add output has both the URI and the QR heading'
     bash "$manager" remove printed
     assert_eq 'main-user,phone,tablet' "$(bash "$manager" list | LC_ALL=C sort | paste -sd ,)" 'list contains only client names'
-    bash "$manager" show phone --uri > "$scratch/profile"
+    bash "$manager" show phone | grep '^vless://' > "$scratch/profile"
     jq '.clients |= map(select(.name=="phone"))' "$state" > "$scratch/selected-state.json"
     assert_success 'show profile independently parses to stored identity' python3 "$TESTS_DIR/helpers/uri-check.py" "$scratch/selected-state.json" "$scratch/profile"
     phone_uuid=$(jq -r '.clients[]|select(.name=="phone")|.uuid' "$state")
@@ -34,7 +34,7 @@ if [[ $selected != failed-add-and-remove ]]; then
     # shellcheck disable=SC2016
     assert_success 'revoked UUID and shortId absent from config' jq -e --arg uuid "$phone_uuid" --arg sid "$phone_sid" \
         '[..|strings]|index($uuid)==null and index($sid)==null' "$config"
-    assert_failure 'removed profile is no longer exportable' bash "$manager" show phone --uri
+    assert_failure 'removed profile is no longer exportable' bash "$manager" show phone
 fi
 if [[ $selected != add-list-show-remove ]]; then
     before=$(sha256sum "$state")

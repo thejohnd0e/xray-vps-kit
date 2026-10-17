@@ -27,22 +27,6 @@ xvk_client_list() {
     jq -r '.clients[].name' "$cfg/state.json"
 }
 
-xvk_client_show() {
-    local root=${1%/} name=${2:-} format=${3:-} cfg
-    cfg="${root%/}/etc/xray-vps-kit"
-    xvk_client_require_install "$root" || return 1
-    xvk_validate_name "$name" || { xvk_error 'Invalid client name'; return 1; }
-    case $format in
-        '')
-            jq -er --arg name "$name" \
-                '.clients[]|select(.name==$name)|{name:.name,uuid:.uuid,shortId:.shortId}' \
-                "$cfg/state.json" || { xvk_error 'No such client'; return 1; } ;;
-        --uri)
-            xvk_render_uri "$cfg/state.json" "$name" || { xvk_error 'No such client'; return 1; } ;;
-        *) xvk_error 'Usage: xray-client show NAME [--uri]'; return 1 ;;
-    esac
-}
-
 xvk_client_mutate() (
     set -euo pipefail
     local root=${1%/} operation=${2:-} name=${3:-}

@@ -84,7 +84,7 @@ if [[ $selected == all || $selected == keep-restore-and-full-removal ]]; then
     manager="$root/usr/local/bin/xray-client"
     bash "$manager" add second-user > /dev/null
     cfg="$root/etc/xray-vps-kit"
-    bash "$manager" show main-user --uri > "$scratch/uri-before"
+    bash "$manager" show main-user | grep '^vless://' > "$scratch/uri-before"
     assert_success 'help prints without prompting' bash "$PROJECT_DIR/uninstall.sh" --help
     assert_failure 'unknown argument is rejected' bash "$PROJECT_DIR/uninstall.sh" --bogus
     # The option parser rejects a production run before any lock or path access.
@@ -121,7 +121,7 @@ if [[ $selected == all || $selected == keep-restore-and-full-removal ]]; then
         bash "$PROJECT_DIR/install.sh" --restore --non-interactive --no-service --root "$root" --archive "$archive"
     assert_eq "$identity_before" "$(jq -c 'del(.generation,.installed,.lastSuccessfulSnapshot)' "$cfg/state.json")" 'restore keeps keys, endpoint and client identities'
     assert_success 'restore regenerates the identical server config' cmp -s "$scratch/config-before" "$cfg/config.json"
-    bash "$manager" show main-user --uri > "$scratch/uri-after"
+    bash "$manager" show main-user | grep '^vless://' > "$scratch/uri-after"
     assert_success 'client profile bytes survive uninstall and restore' cmp -s "$scratch/uri-before" "$scratch/uri-after"
 
     assert_success 'full removal with --yes succeeds' bash "$PROJECT_DIR/uninstall.sh" --root "$root" --yes

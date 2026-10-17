@@ -62,7 +62,7 @@ if [[ $selected == all || $selected == coherent-upgrade-and-rollback ]]; then
 
     initial_identity=$(state_identity_view "$state")
     initial_uri="$scratch/initial-uri"
-    bash "$manager" show main-user --uri > "$initial_uri"
+    bash "$manager" show main-user | grep '^vless://' > "$initial_uri"
     initial_bundle=$(readlink "$root/opt/xray-vps-kit/current")
     assert_success 'update switches to a self-contained candidate bundle' \
         bash "$fixture/update.sh" --root "$root" --archive "$archive"
@@ -71,7 +71,7 @@ if [[ $selected == all || $selected == coherent-upgrade-and-rollback ]]; then
     assert_eq "$initial_identity" "$(state_identity_view "$state")" 'update preserves endpoint, keys and client identities'
     assert_success 'unchanged identities produce byte-identical generated config' cmp -s "$config" "$scratch/initial-config"
     assert_failure 'updated current symlink differs from original bundle' test "$(readlink "$root/opt/xray-vps-kit/current")" = "$initial_bundle"
-    bash "$manager" show main-user --uri > "$scratch/updated-uri"
+    bash "$manager" show main-user | grep '^vless://' > "$scratch/updated-uri"
     assert_success 'client profile bytes survive update' cmp -s "$initial_uri" "$scratch/updated-uri"
     assert_success 'installed manager version is self-contained' bash "$manager" version
 
@@ -83,7 +83,7 @@ if [[ $selected == all || $selected == coherent-upgrade-and-rollback ]]; then
     assert_eq "$initial_bundle" "$(readlink "$root/opt/xray-vps-kit/current")" 'rollback restores previous bundle selection'
     assert_eq '0.1.0' "$(jq -r '.installed.kitVersion' "$state")" 'rollback restores prior installed metadata'
     assert_eq "$initial_identity" "$(state_identity_view "$state")" 'rollback restores matching client state'
-    bash "$manager" show main-user --uri > "$scratch/rolled-back-uri"
+    bash "$manager" show main-user | grep '^vless://' > "$scratch/rolled-back-uri"
     assert_success 'rollback preserves the exact client profile' cmp -s "$initial_uri" "$scratch/rolled-back-uri"
 fi
 

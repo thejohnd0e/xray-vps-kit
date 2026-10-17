@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Portable export and redacted diagnostics. Export writes the exact same URI
-# bytes that `show --uri` prints; QR is generated locally. Doctor reports
+# bytes that `show` prints; QR is generated locally. Doctor reports
 # labeled check results only and never prints a URI, private key or UUID.
 
 xvk_client_show_qr() {
@@ -11,7 +11,7 @@ xvk_client_show_qr() {
     uri=$(xvk_render_uri "$cfg/state.json" "$name") || { xvk_error 'No such client'; return 1; }
     xvk_require_commands qrencode || return 1
     # Pipe the bare URI without a trailing newline so the encoded payload and
-    # the `show --uri` line are the same bytes apart from that newline.
+    # the URI line of `show` are the same bytes apart from that newline.
     printf '%s' "$uri" | qrencode -t ANSIUTF8
 }
 
@@ -19,6 +19,8 @@ xvk_client_show_qr() {
 xvk_client_print_profile() {
     local root=${1%/} name=${2:-} cfg uri
     cfg="${root%/}/etc/xray-vps-kit"
+    xvk_client_require_install "$root" || return 1
+    xvk_validate_name "$name" || { xvk_error 'Invalid client name'; return 1; }
     uri=$(xvk_render_uri "$cfg/state.json" "$name") || { xvk_error 'No such client'; return 1; }
     printf 'Client %s
 URI:

@@ -28,7 +28,7 @@ cat > "$XVK_QR_INPUT"
 exec "$XVK_REAL_QRENCODE" "$@" < "$XVK_QR_INPUT"
 QR
     chmod 755 "$scratch/qr-bin/qrencode"
-    bash "$manager" show main-user --uri > "$scratch/uri"
+    bash "$manager" show main-user | grep '^vless://' > "$scratch/uri"
     assert_success 'URI export parses independently' python3 "$TESTS_DIR/helpers/uri-check.py" "$state" "$scratch/uri"
     assert_success 'text export creates a new private file' bash "$manager" export main-user --output "$scratch/export"
     assert_eq 600 "$(stat -c %a "$scratch/export")" 'export mode is0600'
