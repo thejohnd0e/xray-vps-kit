@@ -8,6 +8,17 @@ source "$TESTS_DIR/helpers/sandbox.sh"
 scratch=$(mktemp -d)
 trap 'rm -rf -- "$scratch"' EXIT
 xvk_test_probe_path "$scratch"
+# A lifecycle uninstall must never remove shared packages or run autoremove.
+# Any package-manager call fails and leaves evidence, even if its status is ignored.
+export XVK_PACKAGE_TRACE="$scratch/package-manager-calls"
+for package_manager in apt apt-get dpkg; do
+    cat > "$scratch/probe-bin/$package_manager" <<'STUB'
+#!/usr/bin/env bash
+printf '%s %s\n' "${0##*/}" "$*" >> "$XVK_PACKAGE_TRACE"
+exit 97
+STUB
+    chmod +x "$scratch/probe-bin/$package_manager"
+done
 archive=$(bash "$TESTS_DIR/download-core.sh" --arch amd64)
 
 install_test_root() {
@@ -218,3 +229,4 @@ if [[ $selected == all || $selected == foreign-rule-and-replaced-file ]]; then
     assert_success 'already absent owned rule is safe' run_locked_with_ufw "$root" "$scratch/rows-absent" false
     assert_eq '[ 1] 22/tcp ALLOW IN Anywhere' "$(cat "$scratch/rows-absent")" 'unrelated firewall rows are untouched'
 fi
+assert_eq '' "$(cat "$XVK_PACKAGE_TRACE" 2>/dev/null || true)" 'uninstall never invokes a package manager'

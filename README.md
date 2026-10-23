@@ -32,9 +32,13 @@ Files in this directory:
 | Network | public IPv4, TCP port open | default TCP 443; open it in the provider's firewall too |
 | Access | root | |
 
-The installer installs what it needs through `apt` (`jq`, `curl`, `unzip`, `openssl`, `qrencode`,
-`iproute2`, `util-linux`). The firewall check needs `nftables` or `iptables` to be present; one of
-them is on every standard Debian/Ubuntu server.
+Before preflight, the installer automatically installs missing dependencies through `apt`
+(`jq`, `curl`, `unzip`, `openssl`, `qrencode`, `iproute2`, `util-linux` and CA certificates).
+It shows the missing package list, current stage and APT's native download/installation progress;
+if the tools are already available, APT is skipped. If neither firewall inspection tool is
+available, it installs `iptables`; this does not enable a firewall. Package installation uses
+`--no-remove`, and uninstall retains system packages without running `autoremove`.
+Testing installs (`--no-service --root DIR`) never install host packages.
 
 ## Install on a new server
 

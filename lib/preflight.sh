@@ -32,13 +32,10 @@ xvk_probe_target() (
 xvk_install_preflight() {
     local project=$1 value preserved
     : "${XVK_ROOT:?installer options must be parsed first}"
-    if ! xvk_require_commands curl openssl ss timeout jq realpath; then
-        xvk_error 'Bootstrap preflight dependencies: sudo apt-get update && sudo apt-get install curl ca-certificates openssl iproute2 coreutils jq'
-        return 1
-    fi
-    [[ -s /etc/ssl/certs/ca-certificates.crt ]] || { xvk_error 'Missing CA trust: sudo apt-get install ca-certificates'; return 1; }
+    if [[ $XVK_SANDBOX != true && $EUID != 0 ]]; then xvk_error 'Production installation requires root'; return 1; fi
     XVK_ARCH=$(xvk_detect_platform) || return 1
     export XVK_ARCH
+    xvk_install_dependencies || return 1
     if [[ -n $XVK_ARCHIVE ]]; then
         XVK_ARCHIVE=$(realpath -ms -- "$XVK_ARCHIVE") || return 1
         if ! xvk_release_validate_lock "$project/releases/xray.lock.json" ||
@@ -46,7 +43,6 @@ xvk_install_preflight() {
             xvk_error 'Local archive does not match the pinned architecture checksum'; return 1
         fi
     fi
-    if [[ $XVK_SANDBOX != true && $EUID != 0 ]]; then xvk_error 'Production installation requires root'; return 1; fi
     if [[ $XVK_RESTORE == true ]]; then
         preserved="${XVK_ROOT%/}/etc/xray-vps-kit/state.json"
         xvk_state_validate "$preserved" || return 1

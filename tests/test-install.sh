@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 case "${1:-all}" in
-    all|sandbox-and-restore|preflight-and-start-failure|interactive-defaults-and-overrides|cancellation-and-noninteractive-errors) selected=${1:-all} ;;
+    all|dependencies|sandbox-and-restore|preflight-and-start-failure|interactive-defaults-and-overrides|cancellation-and-noninteractive-errors) selected=${1:-all} ;;
     *) printf 'Unknown install case\n' >&2; exit 1 ;;
 esac
 [[ -f $PROJECT_DIR/install.sh ]] || { printf 'FAIL: installer not implemented\n' >&2; exit 1; }
+if [[ $selected == all || $selected == dependencies ]]; then
+    assert_success 'dependency bootstrap handles missing tools, progress and failures safely' \
+        bash "$TESTS_DIR/helpers/test-dependencies.sh"
+    [[ $selected != dependencies ]] || return 0
+fi
 scratch=$(mktemp -d)
 trap 'rm -rf -- "$scratch"' EXIT
 mkdir "$scratch/bin"

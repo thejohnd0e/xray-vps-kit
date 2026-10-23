@@ -20,9 +20,6 @@ xvk_install_locked() (
     fi
     if [[ $XVK_SANDBOX != true ]]; then
         xvk_service_account_check || exit 1
-        if ! apt-get update || ! DEBIAN_FRONTEND=noninteractive apt-get install -y curl ca-certificates jq unzip openssl qrencode iproute2 util-linux; then
-            xvk_error 'Dependency installation failed; packages may remain installed'; exit 1
-        fi
         xvk_service_account_create || exit 1
     fi
     xvk_require_commands jq curl unzip zipinfo openssl qrencode flock || exit 1

@@ -55,6 +55,55 @@ if [[ $selected == all || $selected == curl-pipe-bootstrap ]]; then
     git -C "$repo" add -A
     git -C "$repo" -c user.name=test -c user.email=test@example.invalid commit -q -m fixture
     src="$scratch/src-copy"
+    bootstrap_bin="$scratch/bootstrap-bin"
+    mkdir "$bootstrap_bin"
+    for tool in bash dirname cat uname; do ln -s "$(command -v "$tool")" "$bootstrap_bin/$tool"; done
+    XVK_TEST_GIT=$(command -v git)
+    export XVK_TEST_GIT XVK_TEST_BOOTSTRAP_BIN="$bootstrap_bin" XVK_TEST_APT_TRACE="$scratch/bootstrap-apt-trace"
+    cat > "$bootstrap_bin/apt-get" <<'STUB'
+#!/bin/bash
+printf '%s\n' "$*" >> "$XVK_TEST_APT_TRACE"
+case " $* " in
+    *' update '*) printf 'bootstrap package-list output\n' ;;
+    *' install '*)
+        [[ " $* " == *' --no-remove '* ]] || exit 77
+        [[ " $* " == *' Dpkg::Progress-Fancy=1 '* ]] || exit 78
+        /bin/ln -s "$XVK_TEST_GIT" "$XVK_TEST_BOOTSTRAP_BIN/git"
+        printf 'bootstrap APT progress\n'
+        ;;
+    *) exit 79 ;;
+esac
+STUB
+    chmod +x "$bootstrap_bin/apt-get"
+    bootstrap_without_git() {
+        local script=${1:-install.sh}
+        shift || true
+        PATH="$bootstrap_bin" XVK_SRC="$scratch/bootstrap-src" XVK_REPO="file://$repo" \
+            bash -s -- "$@" < "$PROJECT_DIR/$script" > "$scratch/bootstrap-output" 2>&1
+    }
+    for script in install.sh update.sh uninstall.sh; do
+        rm -f "$bootstrap_bin/git"
+        : > "$XVK_TEST_APT_TRACE"
+        assert_failure 'piped sandbox refuses missing git' bootstrap_without_git "$script" --no-service --root "$scratch/sandbox"
+        assert_eq '' "$(cat "$XVK_TEST_APT_TRACE")" 'piped sandbox never invokes APT'
+    done
+    if (( EUID == 0 )); then
+        assert_success 'piped bootstrap installs missing git without removing packages' bootstrap_without_git install.sh --help
+        assert_success 'bootstrap package installation progress is visible' grep -q 'bootstrap APT progress' "$scratch/bootstrap-output"
+    else
+        assert_failure 'source override cannot bypass root for package installation' bootstrap_without_git install.sh --help
+        assert_eq '' "$(cat "$XVK_TEST_APT_TRACE")" 'non-root bootstrap never invokes APT'
+    fi
+    # Unsupported architectures must be rejected before package mutation, even
+    # when a source-directory override is provided for the local fixture.
+    rm -f "$bootstrap_bin/git"
+    : > "$XVK_TEST_APT_TRACE"
+    rm "$bootstrap_bin/uname"
+    printf '#!/bin/bash\nprintf "unsupported-arch\\n"\n' > "$bootstrap_bin/uname"
+    chmod +x "$bootstrap_bin/uname"
+    assert_failure 'unsupported bootstrap architecture refuses' bootstrap_without_git install.sh --help
+    assert_success 'unsupported platform is diagnosed' grep -qi 'unsupported' "$scratch/bootstrap-output"
+    assert_eq '' "$(cat "$XVK_TEST_APT_TRACE")" 'unsupported bootstrap never invokes APT'
     piped() {
         local script=$1
         shift

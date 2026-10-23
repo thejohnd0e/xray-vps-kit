@@ -17,7 +17,7 @@ docs_files=("$PROJECT_DIR/README.md" "$PROJECT_DIR/docs/transport-extension.md")
 # Pinned snapshot of the companion README that the backlink patch is written against.
 awg_pin=7eb88d0c7f80f95baa1e0a343d99ba9dc25bbdfd
 # Flags of tools this project does not own, plus the test runners' own options.
-external_flags=' --no-pager --suite --case --os --guest '
+external_flags=' --no-pager --no-remove --suite --case --os --guest '
 
 # Every relative Markdown link must point at an existing file.
 docs_links() {
