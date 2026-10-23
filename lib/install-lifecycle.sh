@@ -10,7 +10,7 @@ xvk_install_locked() (
         xvk_no_symlink_path "$controlled" || { xvk_error 'Symlink in installation paths'; exit 1; }
     done
     xvk_port_free "$XVK_PORT" || { xvk_error 'TCP port became occupied'; exit 1; }
-    for controlled in "$root/usr/local/bin/xray-client" "$root/opt/xray-vps-kit/current" "$root/etc/systemd/system/xray-vps-kit.service"; do
+    for controlled in "$root/usr/local/bin/xray" "$root/usr/local/bin/xray-client" "$root/opt/xray-vps-kit/current" "$root/etc/systemd/system/xray-vps-kit.service"; do
         [[ ! -e $controlled && ! -L $controlled ]] || { xvk_error 'Existing runtime resource conflicts with install/restore'; exit 1; }
     done
     if [[ $XVK_RESTORE == true ]]; then
@@ -83,6 +83,7 @@ xvk_install_locked() (
     install -m 644 "$temporary/etc/systemd/system/xray-vps-kit.service" "$root/etc/systemd/system/xray-vps-kit.service" || exit 1
     install -m 755 "$temporary/usr/local/bin/xray-client" "$root/usr/local/bin/xray-client" || exit 1
     ln -s "releases/$bundle" "$root/opt/xray-vps-kit/current" || exit 1
+    xvk_core_link_create "${root:-/}" || exit 1
     if [[ $XVK_SANDBOX != true ]]; then
         chown root:xray-vps-kit "$cfg" "$cfg/config.json" || exit 1
         # Assign only after success: a failed substitution would leave rule empty and

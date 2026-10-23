@@ -21,7 +21,7 @@ xvk_with_lock() (
 
 xvk_transaction_apply() (
     set -euo pipefail
-    local root=${1%/} stage=$2 hook=$3 cfg snapshot generation old_snapshot rel apply_failed=false
+    local root=${1%/} stage=$2 hook=$3 cfg snapshot generation old_snapshot rel legacy_runtime apply_failed=false
     cfg="$root/etc/xray-vps-kit"
     if [[ ! ${lock_fd:-} =~ ^[0-9]+$ ]] ||
         [[ $(readlink "/proc/self/fd/$lock_fd") != "$root/run/lock/xray-vps-kit.lock" ]] ||
@@ -39,6 +39,7 @@ xvk_transaction_apply() (
     # called from if/! or an assertion helper, even inside a set -e subshell.
     xvk_ownership_verify "$root" "$root" || exit 1
     xvk_ownership_verify "$stage" "$root" || exit 1
+    legacy_runtime=$(jq -r 'has("links")|not' "$stage/etc/xray-vps-kit/ownership.json") || exit 1
     generation=$(jq -r .generation "$cfg/state.json") || exit 1
     [[ $(jq -r .generation "$stage/etc/xray-vps-kit/state.json") == "$((generation + 1))" ]] || {
         xvk_error 'Stale candidate generation'; exit 1;
@@ -72,6 +73,9 @@ xvk_transaction_apply() (
         fi
     done < <(xvk_owned_file_paths; printf '%s\n' etc/xray-vps-kit/ownership.json)
     if [[ $apply_failed == false ]]; then
+        xvk_core_link_sync "$stage" "$root" || apply_failed=true
+    fi
+    if [[ $apply_failed == false ]]; then
         xvk_atomic_selection_replace "$stage/opt/xray-vps-kit/current" "$root/opt/xray-vps-kit/current" || apply_failed=true
     fi
     if [[ $apply_failed == false ]]; then
@@ -79,6 +83,9 @@ xvk_transaction_apply() (
     fi
     if [[ $apply_failed == false ]]; then
         "$hook" healthcheck "$stage" "$root" || apply_failed=true
+    fi
+    if [[ $apply_failed == false && $legacy_runtime == true ]]; then
+        xvk_snapshot_legacy_compatible "$cfg/backups/$snapshot" "$root" || apply_failed=true
     fi
     if [[ $apply_failed == true ]]; then
         if xvk_snapshot_restore "$root" "$cfg/backups/$snapshot" && "$hook" restore "$stage" "$root"; then

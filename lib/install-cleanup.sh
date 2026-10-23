@@ -23,6 +23,7 @@ xvk_install_rollback() {
         xvk_firewall_remove "$rule" || xvk_error 'Firewall rollback requires operator recovery'
     fi
     if [[ $runtime_written == true ]]; then
+        xvk_core_link_remove "${root:-/}" || return 1
         for file in usr/local/bin/xray-client etc/systemd/system/xray-vps-kit.service; do
             if [[ -e $root/$file ]]; then
                 [[ ! -L $root/$file ]] && cmp -s "$root/$file" "$scratch/$file" || return 1

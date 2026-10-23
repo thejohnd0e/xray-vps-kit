@@ -92,7 +92,7 @@ xvk_install_preflight() {
     if [[ $XVK_SANDBOX != true ]]; then
         [[ ! -e /usr/local/bin/xray-client && ! -L /usr/local/bin/xray-client && ! -e /etc/systemd/system/xray-vps-kit.service && ! -L /etc/systemd/system/xray-vps-kit.service ]] || { xvk_error 'Runtime resources already exist'; return 1; }
         [[ $XVK_RESTORE == true || ! -e /etc/xray-vps-kit ]] || { xvk_error 'State already exists; explicit --restore is required'; return 1; }
-        [[ ! -e /usr/local/bin/xray && ! -e /usr/local/etc/xray && ! -e /etc/xray && ! -e /usr/local/x-ui && ! -e /etc/x-ui ]] || { xvk_error 'Foreign Xray installation found'; return 1; }
+        [[ ! -e /usr/local/bin/xray && ! -L /usr/local/bin/xray && ! -e /usr/local/etc/xray && ! -e /etc/xray && ! -e /usr/local/x-ui && ! -e /etc/x-ui ]] || { xvk_error 'Foreign Xray installation found'; return 1; }
         xvk_service_account_check || return 1
         xvk_firewall_preflight "$XVK_PORT" || return 1
     fi

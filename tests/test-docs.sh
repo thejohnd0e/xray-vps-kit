@@ -132,6 +132,7 @@ if [[ $selected == all || $selected == documented-lifecycle-and-links ]]; then
     archive=$(bash "$TESTS_DIR/download-core.sh" --arch amd64)
     root=$(mktemp -d "$scratch/root.XXXXXXXX")
     assert_success 'documented install with --first-client' xvk_test_install "$root" "$archive" --first-client user_01
+    assert_success 'documented xray version command works through PATH' env PATH="$root/usr/local/bin:$PATH" xray version
     manager="$root/usr/local/bin/xray-client"
     bash "$manager" show user_01 > "$scratch/show"
     assert_success 'show prints a URI' grep -q '^vless://' "$scratch/show"

@@ -119,6 +119,7 @@ xvk_update_prepare_stage() {
         cp "$project/templates/xray-vps-kit.service" "$stage/etc/systemd/system/xray-vps-kit.service" || return 1
         printf '#!/usr/bin/env bash\nexec /bin/bash %q "$@"\n' \
             "$filesystem_root/opt/xray-vps-kit/current/xray-client" > "$stage/usr/local/bin/xray-client" || return 1
+        xvk_core_link_create "$stage" || return 1
     else
         state_dir=${state_source%/*}
         snapshot=${state_source%/etc/xray-vps-kit/state.json}
@@ -127,6 +128,7 @@ xvk_update_prepare_stage() {
             "$stage/etc/systemd/system/xray-vps-kit.service" || return 1
         cp -p "$snapshot/usr/local/bin/xray-client" "$stage/usr/local/bin/xray-client" || return 1
         cp -P "$snapshot/opt/xray-vps-kit/current" "$stage/opt/xray-vps-kit/current" || return 1
+        xvk_core_link_sync "$snapshot" "$stage" || return 1
     fi
     chmod 640 "$stage/etc/xray-vps-kit/config.json" || return 1
     chmod 644 "$stage/etc/systemd/system/xray-vps-kit.service" || return 1

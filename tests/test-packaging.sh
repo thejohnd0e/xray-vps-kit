@@ -38,6 +38,7 @@ if [[ $selected == all || $selected == relocated-source ]]; then
     # A near-empty environment: the launcher must not rely on variables from the shell that installed it.
     run_clean() { env -i PATH="$PATH" ${LD_LIBRARY_PATH:+LD_LIBRARY_PATH="$LD_LIBRARY_PATH"} "$@"; }
     assert_success 'version works without the checkout' run_clean bash "$manager" version
+    assert_success 'xray command works without the checkout' run_clean "$root/usr/local/bin/xray" version
     assert_eq user_01 "$(run_clean bash "$manager" list)" 'list works without the checkout'
     assert_success 'add works without the checkout' run_clean bash "$manager" add phone
     assert_success 'show works without the checkout' run_clean bash "$manager" show phone

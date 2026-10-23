@@ -43,6 +43,9 @@ if [[ $selected == all || $selected == sandbox-and-restore ]]; then
     root=$(mktemp -d "$scratch/root.XXXXXXXX")
     assert_success 'sandbox generates validated install without host service operations' \
         bash "$PROJECT_DIR/install.sh" --non-interactive --no-service --root "$root" --endpoint 203.0.113.7 --archive "$archive"
+    assert_success 'installer exposes the core as the xray command' test -L "$root/usr/local/bin/xray"
+    assert_eq '../../../opt/xray-vps-kit/current/xray' "$(readlink "$root/usr/local/bin/xray")" 'xray command follows the selected bundled core'
+    assert_success 'xray version runs through PATH' env PATH="$root/usr/local/bin:$PATH" xray version
     assert_eq main-user "$(jq -r '.clients[0].name' "$root/etc/xray-vps-kit/state.json")" 'default first client is main-user'
     assert_eq 443 "$(jq -r .port "$root/etc/xray-vps-kit/state.json")" 'default local TCP port'
     assert_eq github.com:443 "$(jq -r .target "$root/etc/xray-vps-kit/state.json")" 'implicit target uses443'
@@ -59,8 +62,10 @@ if [[ $selected == all || $selected == sandbox-and-restore ]]; then
     before=$(jq -c 'del(.generation,.installed,.lastSuccessfulSnapshot)' "$root_empty/etc/xray-vps-kit/state.json")
     # Simulate runtime removal while retaining kit-generated private metadata.
     rm "$root_empty/usr/local/bin/xray-client" "$root_empty/etc/systemd/system/xray-vps-kit.service" "$root_empty/opt/xray-vps-kit/current"
+    rm "$root_empty/usr/local/bin/xray"
     rm -rf -- "$root_empty/opt/xray-vps-kit/releases"
     assert_success 'explicit restore reuses retained settings and keys' bash "$PROJECT_DIR/install.sh" --non-interactive --no-service --root "$root_empty" --restore --archive "$archive"
+    assert_success 'restore recreates the xray command' env PATH="$root_empty/usr/local/bin:$PATH" xray version
     assert_eq "$before" "$(jq -c 'del(.generation,.installed,.lastSuccessfulSnapshot)' "$root_empty/etc/xray-vps-kit/state.json")" 'restore preserves all identities and never creates main-user'
     before=$(sha256sum "$root_empty/etc/xray-vps-kit/state.json")
     rm "$root_empty/usr/local/bin/xray-client" "$root_empty/opt/xray-vps-kit/current"
@@ -91,6 +96,7 @@ if [[ $selected == all || $selected == preflight-and-start-failure || $selected 
     export XVK_TEST_FAIL_INSTALL=true
     assert_failure 'partial file installation returns nonzero' bash "$PROJECT_DIR/install.sh" --non-interactive --no-service --root "$root" --endpoint 203.0.113.7 --archive "$archive"
     assert_failure 'failed fresh activation retains no credential state' test -e "$root/etc/xray-vps-kit/state.json"
+    assert_failure 'failed fresh installation leaves no dangling xray command' test -L "$root/usr/local/bin/xray"
     export XVK_TEST_FAIL_INSTALL=false
     # Read-only system identity adapter: exercise the complete retained-account
     # contract without creating/changing an account in the everyday WSL distro.

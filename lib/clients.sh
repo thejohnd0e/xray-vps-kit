@@ -82,6 +82,7 @@ xvk_client_mutate() (
     cp -p "$root/etc/systemd/system/xray-vps-kit.service" "$stage/etc/systemd/system/xray-vps-kit.service" || exit 1
     cp -p "$root/usr/local/bin/xray-client" "$stage/usr/local/bin/xray-client" || exit 1
     ln -s -- "$bundle" "$stage/opt/xray-vps-kit/current" || exit 1
+    xvk_core_link_sync "$root" "$stage" || exit 1
     firewall=$(jq -c .firewallRule "$cfg/ownership.json") || exit 1
     xvk_ownership_manifest "$stage" "$root" "$firewall" > "$stage/etc/xray-vps-kit/ownership.json" || exit 1
     chmod 600 "$stage/etc/xray-vps-kit/ownership.json" || exit 1

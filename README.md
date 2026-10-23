@@ -55,6 +55,13 @@ the port and SNI (press Enter for the defaults) and installs without a final con
 prints the first client's URI and QR code; to see them again later run `xray-client show user_01`.
 For automation add `--non-interactive`.
 
+The installer also exposes the bundled core as `xray` through
+`/usr/local/bin/xray`, a symlink to `/opt/xray-vps-kit/current/xray`.
+Run `xray version` for the core version, or `xray-client version` for both kit and core versions.
+The link follows updates and rollbacks; updating an older installation adds it automatically.
+Uninstall removes the owned link (including with `--keep-config`); `--restore` recreates it.
+An existing unrelated binary or a replaced command link is not overwritten.
+
 **Update** (fetches the latest kit and applies it; changes nothing if nothing is newer):
 
 ```bash

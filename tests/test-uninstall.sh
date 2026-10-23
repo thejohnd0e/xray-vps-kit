@@ -117,6 +117,7 @@ if [[ $selected == all || $selected == keep-restore-and-full-removal ]]; then
     backups_before=$(cd "$cfg" && find backups -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum)
     assert_success '--keep-config removal succeeds' bash "$PROJECT_DIR/uninstall.sh" --root "$root" --yes --keep-config
     assert_failure 'launcher is removed' test -e "$root/usr/local/bin/xray-client"
+    assert_failure 'xray command is removed even with --keep-config' test -L "$root/usr/local/bin/xray"
     assert_failure 'unit is removed' test -e "$root/etc/systemd/system/xray-vps-kit.service"
     assert_failure 'selected bundle link is removed' test -L "$root/opt/xray-vps-kit/current"
     assert_failure 'all bundles are removed' test -e "$root/opt/xray-vps-kit"
@@ -130,6 +131,7 @@ if [[ $selected == all || $selected == keep-restore-and-full-removal ]]; then
     cp -p "$cfg/config.json" "$scratch/config-before"
     assert_success 'install --restore recreates runtime resources' \
         bash "$PROJECT_DIR/install.sh" --restore --non-interactive --no-service --root "$root" --archive "$archive"
+    assert_success 'restore recreates an executable xray command' env PATH="$root/usr/local/bin:$PATH" xray version
     assert_eq "$identity_before" "$(jq -c 'del(.generation,.installed,.lastSuccessfulSnapshot)' "$cfg/state.json")" 'restore keeps keys, endpoint and client identities'
     assert_success 'restore regenerates the identical server config' cmp -s "$scratch/config-before" "$cfg/config.json"
     bash "$manager" show main-user | grep '^vless://' > "$scratch/uri-after"
@@ -149,6 +151,14 @@ if [[ $selected == all || $selected == foreign-rule-and-replaced-file ]]; then
     unit="$root/etc/systemd/system/xray-vps-kit.service"
     launcher="$root/usr/local/bin/xray-client"
     before=$(tree_view "$root")
+
+    rm "$root/usr/local/bin/xray"
+    ln -s /missing/foreign-xray "$root/usr/local/bin/xray"
+    changed_link_tree=$(tree_view "$root")
+    assert_failure 'replaced xray command link refuses uninstall before deletion' bash "$PROJECT_DIR/uninstall.sh" --root "$root" --yes
+    assert_eq "$changed_link_tree" "$(tree_view "$root")" 'replaced xray command link and all files remain untouched'
+    rm "$root/usr/local/bin/xray"
+    ln -s '../../../opt/xray-vps-kit/current/xray' "$root/usr/local/bin/xray"
 
     cp -p "$unit" "$scratch/unit.orig"
     printf '# tampered\n' >> "$unit"

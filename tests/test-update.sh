@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 case "${1:-all}" in
-    all|coherent-upgrade-and-rollback|bad-bundle-and-stale-rollback) selected=${1:-all} ;;
+    all|legacy-core-command|coherent-upgrade-and-rollback|bad-bundle-and-stale-rollback) selected=${1:-all} ;;
     *) printf 'Unknown update case\n' >&2; exit 1 ;;
 esac
 # shellcheck source=tests/helpers/sandbox.sh
 source "$TESTS_DIR/helpers/sandbox.sh"
+# shellcheck source=tests/helpers/legacy-core-runtime.sh
+source "$TESTS_DIR/helpers/legacy-core-runtime.sh"
 scratch=$(mktemp -d)
 trap 'rm -rf -- "$scratch"' EXIT
 xvk_test_probe_path "$scratch"
@@ -35,6 +37,28 @@ install_test_root() {
     mkdir -p "$root"
     xvk_test_install "$root" "$archive" > /dev/null
 }
+
+if [[ $selected == all || $selected == legacy-core-command ]]; then
+    root=$(mktemp -d "$scratch/legacy.XXXXXXXX")
+    install_test_root "$root"
+    manifest="$root/etc/xray-vps-kit/ownership.json"
+    make_legacy_core_runtime "$root"
+    assert_success 'genuine legacy manager mutates clients before migration' bash "$root/usr/local/bin/xray-client" add before-migration
+    fixture="$scratch/legacy-upgrade-kit"
+    make_fixture_kit "$fixture"
+    initial_bundle=$(readlink "$root/opt/xray-vps-kit/current")
+    assert_success 'update migrates an existing install without an xray command' \
+        bash "$fixture/update.sh" --root "$root" --archive "$archive"
+    assert_success 'migrated xray command executes the selected core' env PATH="$root/usr/local/bin:$PATH" xray version
+    assert_success 'migration records ownership of the command link' jq -e '.links[0].path=="usr/local/bin/xray"' "$manifest"
+    assert_success 'rollback to pre-command snapshot succeeds' bash "$fixture/update.sh" --rollback --root "$root"
+    assert_failure 'rollback to legacy snapshot removes the command link' test -L "$root/usr/local/bin/xray"
+    assert_eq "$initial_bundle" "$(readlink "$root/opt/xray-vps-kit/current")" 'legacy rollback restores the previous core selection'
+    assert_success 'legacy manifest remains readable after rollback' bash "$root/usr/local/bin/xray-client" list
+    assert_success 'genuine legacy manager adds clients after migration and rollback' bash "$root/usr/local/bin/xray-client" add after-rollback
+    assert_success 'genuine legacy manager removes clients after rollback' bash "$root/usr/local/bin/xray-client" remove after-rollback
+    assert_success 'uninstall cleans legacy runtime and compatible reverse snapshots' bash "$PROJECT_DIR/uninstall.sh" --root "$root" --yes
+fi
 
 if [[ $selected == all || $selected == coherent-upgrade-and-rollback ]]; then
     root=$(mktemp -d "$scratch/upgrade.XXXXXXXX")
@@ -74,6 +98,8 @@ if [[ $selected == all || $selected == coherent-upgrade-and-rollback ]]; then
     bash "$manager" show main-user | grep '^vless://' > "$scratch/updated-uri"
     assert_success 'client profile bytes survive update' cmp -s "$initial_uri" "$scratch/updated-uri"
     assert_success 'installed manager version is self-contained' bash "$manager" version
+    assert_eq "$(readlink -f "$root/opt/xray-vps-kit/current/xray")" "$(readlink -f "$root/usr/local/bin/xray")" 'xray command follows the updated bundle'
+    assert_success 'updated xray command works through PATH' env PATH="$root/usr/local/bin:$PATH" xray version
 
     moved_fixture="$scratch/kit-0.2.0-moved"
     mv "$fixture" "$moved_fixture"
@@ -81,6 +107,7 @@ if [[ $selected == all || $selected == coherent-upgrade-and-rollback ]]; then
     assert_success 'rollback restores prior bundle, state and config' \
         bash "$moved_fixture/update.sh" --rollback --root "$root"
     assert_eq "$initial_bundle" "$(readlink "$root/opt/xray-vps-kit/current")" 'rollback restores previous bundle selection'
+    assert_eq "$(readlink -f "$root/opt/xray-vps-kit/current/xray")" "$(readlink -f "$root/usr/local/bin/xray")" 'xray command follows rollback selection'
     assert_eq '0.1.0' "$(jq -r '.installed.kitVersion' "$state")" 'rollback restores prior installed metadata'
     assert_eq "$initial_identity" "$(state_identity_view "$state")" 'rollback restores matching client state'
     bash "$manager" show main-user | grep '^vless://' > "$scratch/rolled-back-uri"
@@ -151,6 +178,7 @@ if [[ $selected == all || $selected == bad-bundle-and-stale-rollback ]]; then
     ) || status=$?
     assert_failure 'activation failure returns nonzero' test "$status" -eq 0
     assert_eq "$before_bundle" "$(readlink "$current")" 'failed activation restores old bundle selection'
+    assert_eq "$(readlink -f "$root/opt/xray-vps-kit/current/xray")" "$(readlink -f "$root/usr/local/bin/xray")" 'failed activation restores the command target'
     assert_eq "$before_state" "$(sha256sum "$state")" 'failed activation restores exact old state'
     assert_eq "$before_config" "$(sha256sum "$root/etc/xray-vps-kit/config.json")" 'failed activation restores exact old config'
     assert_success 'failed activation leaves old ownership coherent' \

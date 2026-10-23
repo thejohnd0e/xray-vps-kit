@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 case "${1:-all}" in
-    all|serialized-success|injected-failures) selected=${1:-all} ;;
+    all|core-command|serialized-success|injected-failures) selected=${1:-all} ;;
     *) printf 'Unknown transaction case\n' >&2; exit 1 ;;
 esac
 [[ -f $PROJECT_DIR/lib/transaction.sh && -f $PROJECT_DIR/lib/ownership.sh ]] || {
@@ -91,7 +91,57 @@ run_writer() {
     xvk_transaction_apply "$root" "$stage" transaction_hook
 }
 
-if [[ $selected != injected-failures ]]; then
+if [[ $selected == all || $selected == core-command ]]; then
+    root="$scratch/core-command"
+    seed_root "$root"
+    assert_success 'legacy ownership manifest without xray link is accepted' xvk_ownership_verify "$root" "$root"
+    stage=$(mktemp -d "$root/etc/xray-vps-kit/.stage.XXXXXXXX")
+    prepare_stage "$root" "$stage" migrated
+    xvk_core_link_create "$stage"
+    xvk_ownership_manifest "$stage" "$root" > "$stage/etc/xray-vps-kit/ownership.json"
+    assert_success 'transaction adds xray command to a legacy install' \
+        xvk_with_lock "$root/run/lock/xray-vps-kit.lock" xvk_transaction_apply "$root" "$stage" transaction_hook
+    assert_eq "$(readlink -f "$root/opt/xray-vps-kit/current/xray")" "$(readlink -f "$root/usr/local/bin/xray")" 'xray resolves to the selected core'
+    assert_success 'new link is covered by ownership validation' xvk_ownership_verify "$root" "$root"
+    original_manifest=$(sha256sum "$root/etc/xray-vps-kit/ownership.json")
+    stage=$(mktemp -d "$root/etc/xray-vps-kit/.stage.XXXXXXXX")
+    prepare_stage "$root" "$stage" failed-legacy-rollback
+    FAIL_AT=healthcheck
+    assert_failure 'failed rollback to legacy runtime is rejected' \
+        xvk_with_lock "$root/run/lock/xray-vps-kit.lock" xvk_transaction_apply "$root" "$stage" transaction_hook
+    unset FAIL_AT
+    assert_success 'failed legacy rollback preserves the xray command' test -L "$root/usr/local/bin/xray"
+    assert_eq "$original_manifest" "$(sha256sum "$root/etc/xray-vps-kit/ownership.json")" 'failed legacy rollback restores exact link ownership'
+    stage=$(mktemp -d "$root/etc/xray-vps-kit/.stage.XXXXXXXX")
+    prepare_stage "$root" "$stage" rollback-to-legacy
+    assert_success 'transaction can restore legacy runtime without a link' \
+        xvk_with_lock "$root/run/lock/xray-vps-kit.lock" xvk_transaction_apply "$root" "$stage" transaction_hook
+    assert_failure 'legacy rollback removes the added command' test -L "$root/usr/local/bin/xray"
+    stage=$(mktemp -d "$root/etc/xray-vps-kit/.stage.XXXXXXXX")
+    prepare_stage "$root" "$stage" failed-migration
+    prepare_upgrade "$root" "$stage"
+    xvk_core_link_create "$stage"
+    xvk_ownership_manifest "$stage" "$root" > "$stage/etc/xray-vps-kit/ownership.json"
+    FAIL_AT=healthcheck
+    assert_failure 'failed activation refuses link migration' \
+        xvk_with_lock "$root/run/lock/xray-vps-kit.lock" xvk_transaction_apply "$root" "$stage" transaction_hook
+    unset FAIL_AT
+    assert_failure 'failed migration restores absence of the xray command' test -L "$root/usr/local/bin/xray"
+    assert_success 'failed migration retains valid legacy ownership' xvk_ownership_verify "$root" "$root"
+    foreign="$scratch/foreign-command"
+    mkdir -p "$foreign/usr/local/bin"
+    printf 'foreign binary\n' > "$foreign/usr/local/bin/xray"
+    assert_failure 'link creation cannot overwrite an existing binary' xvk_core_link_create "$foreign"
+    assert_failure 'link synchronization cannot overwrite an existing binary' xvk_core_link_sync "$stage" "$foreign"
+    assert_eq 'foreign binary' "$(cat "$foreign/usr/local/bin/xray")" 'foreign binary bytes are preserved'
+    rm "$foreign/usr/local/bin/xray"
+    ln -s /missing/foreign-core "$foreign/usr/local/bin/xray"
+    assert_failure 'link cleanup refuses a foreign dangling symlink' xvk_core_link_remove "$foreign"
+    assert_eq /missing/foreign-core "$(readlink "$foreign/usr/local/bin/xray")" 'foreign dangling symlink is preserved'
+    [[ $selected != core-command ]] || return 0
+fi
+
+if [[ $selected != injected-failures && $selected != core-command ]]; then
     root="$scratch/success"
     seed_root "$root"
     xvk_with_lock "$root/run/lock/xray-vps-kit.lock" run_writer "$root" one &
