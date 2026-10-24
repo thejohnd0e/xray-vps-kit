@@ -8,21 +8,6 @@
 Xray-core (VLESS + REALITY + XTLS Vision) on TCP 443 and the `xray-client` command to
 manage clients.
 
-Files in this directory:
-
-| File | Purpose |
-|---|---|
-| `install.sh` | installer for a fresh Debian/Ubuntu server |
-| `xray-client` | client manager, installed to `/usr/local/bin` |
-| `update.sh` | applies a newer kit / pinned Xray-core, with rollback |
-| `uninstall.sh` | removes everything `install.sh` created |
-| `releases/xray.lock.json` | pinned Xray-core version with SHA256 per architecture |
-
-> **Status: pre-release (0.1.0).** The full lifecycle (install, clients, update, rollback,
-> uninstall) and real REALITY traffic are tested in disposable VMs on Debian 12/13 and
-> Ubuntu 22.04/24.04 (amd64). Not yet verified: native arm64, internet-facing traffic,
-> imports in physical client apps. Do not deploy on a production server yet.
-
 ## Requirements
 
 | | Minimum | Notes |
