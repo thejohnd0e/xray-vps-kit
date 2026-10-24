@@ -29,7 +29,7 @@ archive=$(bash "$TESTS_DIR/download-core.sh" --arch amd64)
 token=$(openssl rand -hex 8)
 endpoint=198.18.0.1
 target=198.18.0.2
-origin=198.18.0.3
+origin=198.51.100.3
 
 in_ns() { ip netns exec "$namespace" "$@"; }
 
