@@ -4,7 +4,7 @@
 
 * a TLS1.3 + h2 REALITY target (self-signed; the production installer never
   disables target verification, this certificate only exists in the fixture),
-* deterministic HTTP origins: one reachable at 198.51.100.3 and several on
+* deterministic HTTP origins: one reachable at 93.184.216.34 and several on
   addresses the server must refuse to proxy to (RFC1918, loopback, metadata).
 """
 import http.server
@@ -15,7 +15,7 @@ import threading
 
 TARGET = ("198.18.0.2", 8444)
 ORIGINS = {
-    ("198.51.100.3", 8080): "origin",
+    ("93.184.216.34", 8080): "origin",
     ("10.77.0.1", 8080): "private",
     ("127.0.0.1", 8081): "loopback",
     ("169.254.169.254", 8080): "metadata",
