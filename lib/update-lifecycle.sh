@@ -41,9 +41,23 @@ xvk_update_validate_checkout() {
 
 # Emits kit version, core version, content digest and bundle ID as tab-separated
 # non-secret metadata after building the exact installable candidate bundle.
+# Prints the installed bundle directory when it holds exactly the core the effective lock
+# pins (same version and archive SHA256) and still matches its recorded content digest,
+# so the update can reuse that binary instead of downloading the same archive again.
+xvk_update_reusable_core() (
+    set -euo pipefail
+    local root=$1 lock=$2 bundle
+    bundle=$(readlink -f -- "$root/opt/xray-vps-kit/current") || exit 1
+    xvk_no_symlink_path "$bundle" && [[ -f $bundle/xray && -f $bundle/LICENSE-Xray-core && -f $bundle/releases/xray.lock.json ]] || exit 1
+    [[ $(jq -r --arg arch "$XVK_ARCH" '.version + " " + .assets[$arch].sha256' "$lock") == \
+        "$(jq -r --arg arch "$XVK_ARCH" '.version + " " + .assets[$arch].sha256' "$bundle/releases/xray.lock.json")" ]] || exit 1
+    [[ $(xvk_bundle_content_digest "$bundle") == "$(jq -r .installed.contentSha256 "$root/etc/xray-vps-kit/state.json")" ]] || exit 1
+    printf '%s\n' "$bundle"
+)
+
 xvk_update_build_candidate() (
     set -euo pipefail
-    local project=$1 temporary=$2 root=${3:-} archive digest kit core bundle installed_core pinned_core source_project
+    local project=$1 temporary=$2 root=${3:-} archive digest kit core bundle installed_core pinned_core source_project reusable=''
     xvk_update_validate_checkout "$project" || exit 1
     source_project=$project
     if [[ -n $root ]]; then
@@ -59,10 +73,13 @@ xvk_update_build_candidate() (
             cp "$root/opt/xray-vps-kit/current/releases/xray.lock.json" "$source_project/releases/xray.lock.json" || exit 1
             printf 'Keeping newer installed Xray-core %s while updating the kit.\n' "$installed_core" >&2
         fi
+        reusable=$(xvk_update_reusable_core "$root" "$source_project/releases/xray.lock.json") || reusable=''
     fi
     mkdir "$temporary/bundle" || exit 1
     archive=$XVK_ARCHIVE
-    if [[ -z $archive ]]; then
+    if [[ -z $archive && -n $reusable ]]; then
+        archive=$reusable
+    elif [[ -z $archive ]]; then
         mkdir "$temporary/cache" || exit 1
         archive=$(xvk_release_acquire "$source_project/releases/xray.lock.json" "$XVK_ARCH" "$temporary/cache") || exit 1
     elif ! xvk_verify_sha256 "$archive" "$(jq -r --arg arch "$XVK_ARCH" '.assets[$arch].sha256' "$source_project/releases/xray.lock.json")"; then

@@ -46,9 +46,9 @@ xvk_https_get() {
     cp "$future" "$2" || return 1
     "$after_download"
 }
-make_release 26.10.21
+make_release 26.10.22
 assert_success 'explicit run discovers, verifies and installs a newer stable core' xvk_auto_run "$PROJECT_DIR" "$root" run
-assert_eq v26.10.21 "$(jq -r .installed.coreVersion "$root/etc/xray-vps-kit/state.json")" 'daily worker selects the discovered core'
+assert_eq v26.10.22 "$(jq -r .installed.coreVersion "$root/etc/xray-vps-kit/state.json")" 'daily worker selects the discovered core'
 assert_eq updated "$(jq -r .outcome "$root/var/lib/xray-vps-kit-auto-update/last-run.json")" 'last result records a successful update'
 before=$(sha256sum "$root/etc/xray-vps-kit/state.json")
 assert_success 'same-version check is a no-op' xvk_auto_run "$PROJECT_DIR" "$root" run

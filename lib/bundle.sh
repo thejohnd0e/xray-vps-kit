@@ -3,8 +3,13 @@
 xvk_bundle_build() (
     set -euo pipefail
     local source=$1 archive=$2 destination=$3 file
-    xvk_release_extract "$source/releases/xray.lock.json" "$XVK_ARCH" "$archive" "$destination" || exit 1
-    mv "$destination/LICENSE" "$destination/LICENSE-Xray-core" || exit 1
+    if [[ -d $archive ]]; then
+        # An installed bundle of the very same core: reuse its binary and license.
+        cp -- "$archive/xray" "$archive/LICENSE-Xray-core" "$destination/" || exit 1
+    else
+        xvk_release_extract "$source/releases/xray.lock.json" "$XVK_ARCH" "$archive" "$destination" || exit 1
+        mv "$destination/LICENSE" "$destination/LICENSE-Xray-core" || exit 1
+    fi
     mkdir "$destination/lib" "$destination/releases" || exit 1
     for file in "$source"/lib/*.sh "$source"/lib/*.jq; do
         cp -- "$file" "$destination/lib/" || exit 1

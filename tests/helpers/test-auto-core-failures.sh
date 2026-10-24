@@ -28,14 +28,14 @@ make_candidate() {
     mkdir "$scratch/$name"
     xvk_core_candidate "$root" "$scratch/$name.lock" "$scratch/$name.zip" "$scratch/$name" > "$scratch/$name.base"
 }
-make_candidate rejected 26.10.21 reject
+make_candidate rejected 26.10.22 reject
 before_state=$(sha256sum "$root/etc/xray-vps-kit/state.json")
 before_manifest=$(sha256sum "$root/etc/xray-vps-kit/ownership.json")
 assert_failure 'new core rejecting the preserved config is refused before selection' \
     xvk_with_lock "$root/run/lock/xray-vps-kit.lock" xvk_core_apply_locked "$root" "$scratch/rejected" "$(cat "$scratch/rejected.base")" false xvk_service_hook
 assert_eq "$before_state" "$(sha256sum "$root/etc/xray-vps-kit/state.json")" 'config refusal keeps exact installed state'
 assert_eq "$before_manifest" "$(sha256sum "$root/etc/xray-vps-kit/ownership.json")" 'config refusal keeps exact ownership metadata'
-make_candidate future 26.10.21
+make_candidate future 26.10.22
 auto_fail_activation() {
     [[ $1 != activate ]] || return 1
     xvk_service_hook "$@"

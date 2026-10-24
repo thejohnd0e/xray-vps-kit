@@ -48,10 +48,10 @@ if [[ $selected == all || $selected == core ]]; then
     archive=$(bash "$TESTS_DIR/download-core.sh" --arch amd64)
     root=$(mktemp -d "$scratch/root.XXXXXXXX")
     xvk_test_install "$root" "$archive" > /dev/null
-    python3 "$TESTS_DIR/helpers/fake-auto-core.py" "$scratch/future.zip" 26.10.21
+    python3 "$TESTS_DIR/helpers/fake-auto-core.py" "$scratch/future.zip" 26.10.22
     sha=$(sha256sum "$scratch/future.zip" | cut -d ' ' -f 1)
-    jq --arg sha "$sha" '.version="v26.10.21" | .assets |= with_entries(
-        .value.sha256=$sha | .value.url=("https://github.com/XTLS/Xray-core/releases/download/v26.10.21/"+.value.name))' \
+    jq --arg sha "$sha" '.version="v26.10.22" | .assets |= with_entries(
+        .value.sha256=$sha | .value.url=("https://github.com/XTLS/Xray-core/releases/download/v26.10.22/"+.value.name))' \
         "$PROJECT_DIR/releases/xray.lock.json" > "$scratch/future.lock"
     before_identity=$(jq -c 'del(.generation,.installed,.lastSuccessfulSnapshot)' "$root/etc/xray-vps-kit/state.json")
     before_manager=$(sha256sum "$root/opt/xray-vps-kit/current/lib/clients.sh" | cut -d ' ' -f 1)
@@ -63,7 +63,7 @@ if [[ $selected == all || $selected == core ]]; then
     assert_eq "$before_manager" "$(sha256sum "$scratch/candidate/lib/clients.sh" | cut -d ' ' -f 1)" 'core-only candidate preserves the active manager modules'
     assert_success 'new core applies through the shared transaction lock' \
         xvk_with_lock "$root/run/lock/xray-vps-kit.lock" xvk_core_apply_locked "$root" "$scratch/candidate" "$base" false xvk_service_hook
-    assert_eq v26.10.21 "$(jq -r .installed.coreVersion "$root/etc/xray-vps-kit/state.json")" 'new official core version is recorded'
+    assert_eq v26.10.22 "$(jq -r .installed.coreVersion "$root/etc/xray-vps-kit/state.json")" 'new official core version is recorded'
     assert_eq "$before_identity" "$(jq -c 'del(.generation,.installed,.lastSuccessfulSnapshot)' "$root/etc/xray-vps-kit/state.json")" 'core-only update preserves all identities and settings'
     assert_success 'core-only result passes ownership verification' xvk_ownership_verify "$root" "$root"
     assert_success 'xray command executes the new selected core' "$root/usr/local/bin/xray" version
@@ -77,28 +77,28 @@ if [[ $selected == all || $selected == core ]]; then
     printf '0.2.0\n' > "$fixture/VERSION"
     assert_success 'manual kit upgrade keeps a newer automatically installed core' \
         bash "$fixture/update.sh" --root "$root" --archive "$scratch/future.zip"
-    assert_eq v26.10.21 "$(jq -r .installed.coreVersion "$root/etc/xray-vps-kit/state.json")" 'manual kit upgrade does not lower the effective core version'
+    assert_eq v26.10.22 "$(jq -r .installed.coreVersion "$root/etc/xray-vps-kit/state.json")" 'manual kit upgrade does not lower the effective core version'
     assert_eq 0.2.0 "$(jq -r .installed.kitVersion "$root/etc/xray-vps-kit/state.json")" 'manual upgrade still advances the kit version'
 fi
 
 if [[ $selected == all || $selected == metadata ]]; then
-    jq -n '{tag_name:"v26.10.21",draft:false,prerelease:false,assets:[
-        {name:"Xray-linux-64.zip",browser_download_url:"https://github.com/XTLS/Xray-core/releases/download/v26.10.21/Xray-linux-64.zip",digest:("sha256:"+("a"*64))},
-        {name:"Xray-linux-arm64-v8a.zip",browser_download_url:"https://github.com/XTLS/Xray-core/releases/download/v26.10.21/Xray-linux-arm64-v8a.zip",digest:("sha256:"+("b"*64))}]}' > "$scratch/release.json"
+    jq -n '{tag_name:"v26.10.22",draft:false,prerelease:false,assets:[
+        {name:"Xray-linux-64.zip",browser_download_url:"https://github.com/XTLS/Xray-core/releases/download/v26.10.22/Xray-linux-64.zip",digest:("sha256:"+("a"*64))},
+        {name:"Xray-linux-arm64-v8a.zip",browser_download_url:"https://github.com/XTLS/Xray-core/releases/download/v26.10.22/Xray-linux-arm64-v8a.zip",digest:("sha256:"+("b"*64))}]}' > "$scratch/release.json"
     assert_success 'official stable metadata resolves a strict release lock' \
         xvk_auto_release_lock "$scratch/release.json" "$scratch/lock.json"
     assert_success 'resolved metadata satisfies the existing lock validator' xvk_release_validate_lock "$scratch/lock.json"
-    assert_eq v26.10.21 "$(jq -r .version "$scratch/lock.json")" 'resolved version is the official tag'
+    assert_eq v26.10.22 "$(jq -r .version "$scratch/lock.json")" 'resolved version is the official tag'
     assert_eq aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
         "$(jq -r .assets.amd64.sha256 "$scratch/lock.json")" 'amd64 digest is extracted without its prefix'
     assert_eq bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb \
         "$(jq -r .assets.arm64.sha256 "$scratch/lock.json")" 'arm64 digest is retained too'
     for mutation in \
-        '.draft=true' '.prerelease=true' '.draft=null' '.tag_name="v26.10.21-beta"' \
+        '.draft=true' '.prerelease=true' '.draft=null' '.tag_name="v26.10.22-beta"' \
         '.tag_name="../main"' '.assets=[]' '.assets += [.assets[0]]' \
         'del(.assets[1])' '.assets[0].digest=null' '.assets[1].digest="sha256:bad"' \
         '.assets[0].browser_download_url="https://example.invalid/core.zip"' \
-        '.assets[0].browser_download_url="http://github.com/XTLS/Xray-core/releases/download/v26.10.21/Xray-linux-64.zip"'; do
+        '.assets[0].browser_download_url="http://github.com/XTLS/Xray-core/releases/download/v26.10.22/Xray-linux-64.zip"'; do
         jq "$mutation" "$scratch/release.json" > "$scratch/bad-release.json"
         assert_failure 'untrusted or incomplete release metadata is rejected' \
             xvk_auto_release_lock "$scratch/bad-release.json" "$scratch/rejected-lock.json"

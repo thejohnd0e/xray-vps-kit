@@ -194,3 +194,22 @@ if [[ $selected == all || $selected == bad-bundle-and-stale-rollback ]]; then
     assert_eq 0 "$(jq '.clients|length' "$state")" 'stale rollback does not resurrect the revoked client'
     assert_eq '0.2.0' "$(jq -r '.installed.kitVersion' "$state")" 'stale rollback keeps the newer bundle installed'
 fi
+
+if [[ $selected == all || $selected == coherent-upgrade-and-rollback ]]; then
+    # The installed bundle already holds the pinned core, so an update without --archive
+    # must not download it again: a curl that always fails proves nothing is fetched.
+    root=$(mktemp -d "$scratch/reuse.XXXXXXXX")
+    install_test_root "$root"
+    mkdir "$scratch/no-curl"
+    printf '#!/bin/sh\nexit 22\n' > "$scratch/no-curl/curl"
+    chmod +x "$scratch/no-curl/curl"
+    status=$(capture_status "$scratch/reuse.log" env PATH="$scratch/no-curl:$PATH" bash "$PROJECT_DIR/update.sh" --root "$root")
+    assert_eq 0 "$status" 'update with the already installed core needs no download'
+    assert_success 'reuse reports nothing to update' grep -q 'Nothing to update' "$scratch/reuse.log"
+    fixture="$scratch/reuse-kit"
+    make_fixture_kit "$fixture"
+    status=$(capture_status "$scratch/reuse-upgrade.log" env PATH="$scratch/no-curl:$PATH" bash "$fixture/update.sh" --root "$root")
+    assert_eq 0 "$status" 'kit-only upgrade reuses the installed core without a download'
+    assert_eq '0.2.0' "$(jq -r '.installed.kitVersion' "$root/etc/xray-vps-kit/state.json")" 'kit-only upgrade is recorded'
+    assert_success 'reused core still runs' "$root/opt/xray-vps-kit/current/xray" version
+fi
