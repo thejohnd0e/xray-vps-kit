@@ -315,6 +315,18 @@ bash tests/run-vm.sh --os debian-12|debian-13|ubuntu-22.04|ubuntu-24.04 --case a
 
 CI runs ShellCheck and all sandbox suites plus the real-traffic e2e suite on Ubuntu 22.04 and 24.04 for every push.
 
+## Related Projects
+
+These projects complement each other: the kits set up the servers, and the proxy containers bring a
+tunnel into your local network as a plain HTTP/SOCKS5 proxy.
+
+- [awg-vps-kit](https://github.com/thejohnd0e/awg-vps-kit): one-shot **AmneziaWG (UDP)** server installer and
+  client manager. Use it next to this kit or instead of it (see "AWG or Xray?").
+- [VLESS-to-HTTP](https://github.com/thejohnd0e/VLESS-to-HTTP): a Docker container that turns the `vless://`
+  link printed by `xray-client show NAME` into an HTTP/SOCKS5 proxy, available as a prebuilt image.
+- [AmneziaWG-to-Proxy](https://github.com/thejohnd0e/AmneziaWG-to-Proxy): the same idea for **AmneziaWG**, a
+  container that turns your AmneziaWG client configs into an HTTP/SOCKS5 proxy with automatic config failover.
+
 ## License
 
 MIT, see `LICENSE`.
