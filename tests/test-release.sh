@@ -26,7 +26,7 @@ if [[ $selected != corrupt-and-traversal ]]; then
             mkdir "$scratch/core"
             assert_success 'native binary and license safely extracted' xvk_release_extract "$lock" "$arch" "$archive" "$scratch/core"
             version=$("$scratch/core/xray" version)
-            assert_success 'real binary identifies pinned version' grep -q '^Xray 26\.3\.27 ' <<< "$version"
+            assert_success 'real binary identifies pinned version' grep -q '^Xray 26.10.21 ' <<< "$version"
             assert_success 'upstream license retained' test -s "$scratch/core/LICENSE"
             assert_failure 'geodata not installed' test -e "$scratch/core/geoip.dat"
             digest=$(xvk_bundle_content_digest "$scratch/core")
