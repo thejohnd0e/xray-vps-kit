@@ -11,7 +11,7 @@
 # stored). Never point either mode at a production host: the cases enable UFW,
 # reboot the guest and remove services.
 # Guards with explicit error paths, remote-expanded quotes and the EXIT trap are intentional.
-# shellcheck disable=SC2015,SC2016,SC2317
+# shellcheck disable=SC2015,SC2016,SC2317,SC2329
 set -euo pipefail
 project=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 cache="$project/.omo/cache/images"

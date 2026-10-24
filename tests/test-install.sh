@@ -117,6 +117,7 @@ if [[ $selected == all || $selected == preflight-and-start-failure || $selected 
         if xvk_service_account_check; then exit 1; fi
         fixture_account='xray-vps-kit:x:994:994:xray-vps-kit managed service account:/nonexistent:/usr/sbin/nologin'
         fixture_memberships='994 995'
+        # shellcheck disable=SC2218
         if xvk_service_account_check; then exit 1; fi
     )
     assert_success 'retained-account fixture completed all positive/negative checks' true
@@ -127,7 +128,7 @@ if [[ $selected == all || $selected == preflight-and-start-failure || $selected 
         source "$PROJECT_DIR/lib/firewall.sh"
         fixture_ufw_rows="$scratch/ufw-rows"
         # Invoked indirectly by the sourced firewall adapter.
-        # shellcheck disable=SC2317
+        # shellcheck disable=SC2317,SC2329
         ufw() {
             if [[ $1 == status ]]; then cat "$fixture_ufw_rows"; return; fi
             if [[ $1 == --force && $2 == delete ]]; then : > "$fixture_ufw_rows"; return; fi
@@ -153,7 +154,7 @@ if [[ $selected == all || $selected == preflight-and-start-failure || $selected 
         write_state_fixture "$scratch/hook-stage/etc/xray-vps-kit/state.json"
         fixture_service_state="$scratch/service-restarted"
         # Invoked indirectly by the production service callback.
-        # shellcheck disable=SC2317
+        # shellcheck disable=SC2317,SC2329
         systemctl() {
             case "$*" in
                 daemon-reload) return 0 ;;

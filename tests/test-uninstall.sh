@@ -58,14 +58,14 @@ run_locked_with_ufw() {
             source "$PROJECT_DIR/lib/$module.sh"
         done
         # Invoked indirectly by the sourced firewall adapter.
-        # shellcheck disable=SC2317
+        # shellcheck disable=SC2317,SC2329
         ufw() {
             if [[ $1 == status ]]; then cat "$ufw_rows"; return; fi
             if [[ $1 == --force && $2 == delete ]]; then sed -i "${3}d" "$ufw_rows"; return; fi
             return 1
         }
         # Invoked indirectly by the uninstall lifecycle.
-        # shellcheck disable=SC2317
+        # shellcheck disable=SC2317,SC2329
         ufw_hook() {
             case $1 in firewall) xvk_firewall_remove "$3" ;; *) return 0 ;; esac
         }

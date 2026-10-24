@@ -166,7 +166,7 @@ if [[ $selected == all || $selected == bad-bundle-and-stale-rollback ]]; then
             source "$fixture/lib/$module.sh"
         done
         # Invoked indirectly by the transaction engine.
-        # shellcheck disable=SC2317
+        # shellcheck disable=SC2317,SC2329
         failing_activation_hook() {
             local action=$1
             [[ $action != activate ]] || return 1
