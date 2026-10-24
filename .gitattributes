@@ -5,3 +5,4 @@
 *.service text eol=lf
 /VERSION text eol=lf
 *.patch text eol=lf
+*.jq text eol=lf
