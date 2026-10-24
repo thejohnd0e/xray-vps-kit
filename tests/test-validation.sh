@@ -32,6 +32,7 @@ if [[ $selected != malicious-and-missing-inputs ]]; then
     done
     assert_success 'valid target keeps independent port' xvk_validate_target github.com:443
     assert_success 'name boundary accepted' xvk_validate_name A1234567890123456789012345678901
+    assert_success 'email-style name accepted' xvk_validate_name user@example.com
     assert_success 'valid schema accepted' xvk_state_validate "$scratch/state.json"
     assert_eq amd64 "$(xvk_platform debian 12 x86_64)" 'Debian amd64 mapped'
     assert_eq amd64 "$(xvk_platform ubuntu 22.04 amd64)" 'Ubuntu amd64 mapped'

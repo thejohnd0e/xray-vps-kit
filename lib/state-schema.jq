@@ -1,7 +1,7 @@
 # A state file is exactly one document with one supported schema/transport.
 def fields($expected): type == "object" and (keys == ($expected | sort));
 def boundedint($min; $max): type == "number" and floor == . and . >= $min and . <= $max;
-def name: type == "string" and test("^[A-Za-z0-9_-]{1,32}$");
+def name: type == "string" and test("^[A-Za-z0-9_@.-]{1,32}$");
 def key: type == "string" and test("^[A-Za-z0-9_-]{43}$");
 def sha256: type == "string" and test("^[a-f0-9]{64}$");
 def kitversion: type == "string" and test("^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$");

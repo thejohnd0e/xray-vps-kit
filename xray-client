@@ -23,7 +23,7 @@ xray-client: manage VLESS + REALITY clients (run as root)
   xray-client version                     kit and Xray-core versions
   xray-client help                        this text
 
-NAME: letters, digits, _ and -. One client per device is recommended.
+NAME: letters, digits, _ - @ and . (e.g. an email). One client per device is recommended.
 HELP
 }
 

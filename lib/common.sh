@@ -22,7 +22,7 @@ xvk_validate_port() {
     [[ ${1:-} =~ ^[0-9]{1,5}$ ]] && (( 10#$1 >= 1 && 10#$1 <= 65535 ))
 }
 
-xvk_validate_name() { [[ ${1:-} =~ ^[A-Za-z0-9_-]{1,32}$ ]]; }
+xvk_validate_name() { [[ ${1:-} =~ ^[A-Za-z0-9_@.-]{1,32}$ ]]; }
 
 xvk_validate_host() {
     local host=${1:-} label octet

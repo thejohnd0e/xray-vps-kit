@@ -206,7 +206,7 @@ xray-client doctor                       # health report (never prints keys, UUI
 xray-client version                      # kit and Xray-core versions
 ```
 
-- Names: letters, digits, `_` and `-`. One identity = one device is recommended.
+- Names: letters, digits, `_`, `-`, `@` and `.` (e.g. an email). One identity = one device is recommended.
 - `add` and `remove` change the config atomically and **restart the service**, so every
   connected client drops for a moment and reconnects. On failure the previous config is
   restored. Removing a client disconnects that device for good.
