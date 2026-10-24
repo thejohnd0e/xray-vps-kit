@@ -5,6 +5,9 @@
 # refusal is decided before the first deletion; a leftover foreign entry keeps
 # its parent directory instead of authorizing recursive removal.
 
+# shellcheck source=lib/auto-owned.sh
+source "$(dirname -- "${BASH_SOURCE[0]}")/auto-owned.sh"
+
 # Actions: firewall RECORD | stop | reload. Only the production prefix acts on the
 # host; sandbox roots never touch systemd or the firewall.
 xvk_uninstall_hook() {
@@ -91,9 +94,11 @@ xvk_uninstall_locked() (
     [[ $hook =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] && declare -F "$hook" > /dev/null || {
         xvk_error 'Invalid uninstall hook'; exit 1;
     }
+    xvk_auto_verify "$root" || { xvk_error 'Automatic-update resources have drifted; refusing removal'; exit 1; }
     if [[ -f $cfg/state.json && ! -e $filesystem_root/opt/xray-vps-kit/current && ! -L $filesystem_root/opt/xray-vps-kit/current &&
         ! -e $filesystem_root/usr/local/bin/xray-client && ! -e $filesystem_root/etc/systemd/system/xray-vps-kit.service &&
         ! -e $filesystem_root/usr/local/bin/xray && ! -L $filesystem_root/usr/local/bin/xray ]]; then
+        xvk_auto_remove "$root" || exit 1
         printf 'Kit runtime is already removed; preserved configuration was not touched.\n'
         exit 0
     fi
@@ -112,6 +117,7 @@ xvk_uninstall_locked() (
     # Firewall first: a changed rule refuses the whole uninstall with nothing removed.
     "$hook" firewall "$root" "$firewall" || { xvk_error 'Firewall rule could not be removed safely'; exit 1; }
     "$hook" stop "$root" || { xvk_error 'Could not stop the owned service; no files were removed'; exit 1; }
+    xvk_auto_remove "$root" || exit 1
     xvk_core_link_remove "$root" || exit 1
     for rel in usr/local/bin/xray-client etc/systemd/system/xray-vps-kit.service; do
         rm -f -- "$filesystem_root/$rel" || exit 1

@@ -71,6 +71,61 @@ curl -fsSL https://raw.githubusercontent.com/thejohnd0e/xray-vps-kit/master/upda
 Add `-s -- --check` after `bash` to only report (exit 0 = up to date, 10 = update available) or
 `-s -- --rollback` to return to the previous version.
 
+### Optional daily Xray-core auto-updates
+
+This is **off by default**. To opt in, run as root:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/thejohnd0e/xray-vps-kit/master/auto-update.sh | bash -s -- enable
+```
+
+This installs a separate, self-contained worker and one owned file,
+`/etc/cron.d/xray-vps-kit-auto-update`. It checks the official stable
+[`XTLS/Xray-core` releases](https://github.com/XTLS/Xray-core/releases) every day at
+**03:30 in the server's local time** and installs only a newer version. Enabling schedules
+the job; it does not immediately update. If needed, enabling visibly installs prerequisites
+and starts/enables the system cron service. Other cron jobs are not edited.
+
+Manage the installed worker without the source checkout:
+
+```bash
+bash /opt/xray-vps-kit-auto-update/auto-update.sh status
+bash /opt/xray-vps-kit-auto-update/auto-update.sh run
+bash /opt/xray-vps-kit-auto-update/auto-update.sh disable
+bash /opt/xray-vps-kit-auto-update/auto-update.sh enable
+```
+
+`run` explicitly checks/updates now, even while scheduling is disabled. `disable` removes
+the owned cron entry but retains the worker and last result. Repeat the download/enable
+one-liner to refresh the worker from this repository. The daily job itself neither fetches
+kit scripts nor upgrades the kit.
+
+Last-run reports are overwritten, not appended indefinitely:
+`/var/lib/xray-vps-kit-auto-update/last-run.log` and `last-run.json` (root-only, no client
+credentials). `status` shows enabled/disabled/paused mode and the last outcome.
+
+**What this opts into:** releases are selected from official GitHub metadata rather than
+waiting for this repository's reviewed pin. Both supported Linux assets must advertise
+SHA256 digests; only your architecture's archive is downloaded. Hashes and release URLs
+are checked, and the new core must accept the existing config before switching. These
+checks trust official GitHub metadata/assets; they are not independent signatures or a
+guarantee that a future release has no bugs. Missing metadata/digests, network errors or
+incompatible archives/configs leave the running core unchanged. Ordinary activation
+failure uses the existing snapshot rollback; local service health is not a live-traffic test.
+
+Updating restarts Xray and can briefly interrupt connections. Keys, clients and settings
+are preserved. Manual kit updates keep a newer verified installed core instead of
+downgrading to the checkout pin; a supplied `--archive` must match that effective core lock.
+A successful explicit `--rollback` pauses automatic updates until `enable` is run again,
+so the next job cannot silently undo the rollback. Rollback restores only the immediately
+retained matching bundle when available; later client mutations can invalidate it.
+
+The current uninstaller removes the owned cron entry, worker and reports, including with
+`--keep-config`. Restore does not re-enable scheduling. Do not edit owned worker/cron
+files in place: changed resources are refused rather than overwritten or deleted.
+Use current update/uninstall entrypoints; a historical checkout cannot clean resources
+it did not know about. A leftover worker refuses to recreate a removed proxy runtime.
+
 **Uninstall** (asks for confirmation; details in "Uninstall"):
 
 ```bash

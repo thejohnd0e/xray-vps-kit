@@ -15,7 +15,7 @@ if [[ $selected == all || $selected == relocated-source ]]; then
     archive=$(bash "$TESTS_DIR/download-core.sh" --arch amd64)
     source_copy="$scratch/checkout"
     mkdir "$source_copy"
-    cp -a "$PROJECT_DIR/install.sh" "$PROJECT_DIR/xray-client" "$PROJECT_DIR/VERSION" \
+    cp -a "$PROJECT_DIR/install.sh" "$PROJECT_DIR/auto-update.sh" "$PROJECT_DIR/xray-client" "$PROJECT_DIR/VERSION" \
         "$PROJECT_DIR/lib" "$PROJECT_DIR/releases" "$PROJECT_DIR/templates" "$source_copy/"
     root=$(mktemp -d "$scratch/root.XXXXXXXX")
     assert_success 'install from a copied checkout' \
@@ -31,6 +31,7 @@ if [[ $selected == all || $selected == relocated-source ]]; then
         assert_success "bundle contains $file" test -e "$bundle/$file"
     done
     assert_eq 0 "$(grep -rlaF -- "$source_copy" "$root" | wc -l | tr -d ' ')" 'nothing installed points back at the checkout'
+    assert_success 'optional worker installs before checkout relocation' bash "$source_copy/auto-update.sh" enable --root "$root"
 
     rm -rf -- "$source_copy"
     assert_failure 'the checkout is really gone' test -e "$source_copy"
@@ -39,6 +40,8 @@ if [[ $selected == all || $selected == relocated-source ]]; then
     run_clean() { env -i PATH="$PATH" ${LD_LIBRARY_PATH:+LD_LIBRARY_PATH="$LD_LIBRARY_PATH"} "$@"; }
     assert_success 'version works without the checkout' run_clean bash "$manager" version
     assert_success 'xray command works without the checkout' run_clean "$root/usr/local/bin/xray" version
+    assert_success 'optional worker status works without the checkout' run_clean bash "$root/opt/xray-vps-kit-auto-update/auto-update.sh" status --root "$root"
+    assert_success 'optional worker disable works without the checkout' run_clean bash "$root/opt/xray-vps-kit-auto-update/auto-update.sh" disable --root "$root"
     assert_eq user_01 "$(run_clean bash "$manager" list)" 'list works without the checkout'
     assert_success 'add works without the checkout' run_clean bash "$manager" add phone
     assert_success 'show works without the checkout' run_clean bash "$manager" show phone
@@ -51,11 +54,20 @@ if [[ $selected == all || $selected == curl-pipe-bootstrap ]]; then
     # is a local one so the test needs no network; the code path is the real one.
     repo="$scratch/repo"
     mkdir "$repo"
-    cp -a "$PROJECT_DIR/install.sh" "$PROJECT_DIR/update.sh" "$PROJECT_DIR/uninstall.sh" "$PROJECT_DIR/xray-client"         "$PROJECT_DIR/VERSION" "$PROJECT_DIR/lib" "$PROJECT_DIR/releases" "$PROJECT_DIR/templates" "$repo/"
+    cp -a "$PROJECT_DIR/install.sh" "$PROJECT_DIR/update.sh" "$PROJECT_DIR/uninstall.sh" "$PROJECT_DIR/auto-update.sh" "$PROJECT_DIR/xray-client"         "$PROJECT_DIR/VERSION" "$PROJECT_DIR/lib" "$PROJECT_DIR/releases" "$PROJECT_DIR/templates" "$repo/"
     git -C "$repo" init -q
     git -C "$repo" add -A
     git -C "$repo" -c user.name=test -c user.email=test@example.invalid commit -q -m fixture
     src="$scratch/src-copy"
+    damaged="$scratch/damaged/opt/xray-vps-kit-auto-update"
+    mkdir -p "$damaged"
+    cp "$PROJECT_DIR/auto-update.sh" "$damaged/auto-update.sh"
+    damaged_scheduled_worker() {
+        XVK_SRC="$scratch/must-not-clone" XVK_REPO="file://$repo" \
+            bash "$damaged/auto-update.sh" scheduled --root "$scratch"
+    }
+    assert_failure 'damaged scheduled worker refuses source bootstrap' damaged_scheduled_worker
+    assert_failure 'scheduled worker never downloads kit scripts to repair itself' test -e "$scratch/must-not-clone"
     bootstrap_bin="$scratch/bootstrap-bin"
     mkdir "$bootstrap_bin"
     for tool in bash dirname cat uname; do ln -s "$(command -v "$tool")" "$bootstrap_bin/$tool"; done
@@ -82,7 +94,7 @@ STUB
         PATH="$bootstrap_bin" XVK_SRC="$scratch/bootstrap-src" XVK_REPO="file://$repo" \
             bash -s -- "$@" < "$PROJECT_DIR/$script" > "$scratch/bootstrap-output" 2>&1
     }
-    for script in install.sh update.sh uninstall.sh; do
+    for script in install.sh update.sh uninstall.sh auto-update.sh; do
         rm -f "$bootstrap_bin/git"
         : > "$XVK_TEST_APT_TRACE"
         assert_failure 'piped sandbox refuses missing git' bootstrap_without_git "$script" --no-service --root "$scratch/sandbox"
@@ -115,6 +127,7 @@ STUB
     assert_success 'piped output is the real installer help' grep -q 'Usage: bash install.sh' <<< "$(piped install.sh --help)"
     assert_success 'piped update.sh runs from the copy' grep -q 'Usage' <<< "$(piped update.sh --help)"
     assert_success 'piped uninstall.sh runs from the copy' grep -q 'Usage' <<< "$(piped uninstall.sh --help)"
+    assert_success 'piped auto-update.sh runs from the copy' grep -q 'Usage' <<< "$(piped auto-update.sh --help)"
     printf '0.0.9-bootstrap-check
 ' > "$repo/MARKER"
     git -C "$repo" add MARKER
@@ -133,6 +146,7 @@ STUB
     assert_success 'the bootstrap block is not empty' test -n "$(block_of install.sh)"
     assert_eq "$(block_of install.sh)" "$(block_of update.sh)" 'install.sh and update.sh share one bootstrap block'
     assert_eq "$(block_of install.sh)" "$(block_of uninstall.sh)" 'install.sh and uninstall.sh share one bootstrap block'
+    assert_eq "$(block_of install.sh)" "$(block_of auto-update.sh)" 'optional updater shares the same guarded bootstrap block'
     mkdir "$scratch/not-a-clone"
     assert_failure 'a directory that is not a clone is refused' bash -c "
         cd /usr && XVK_SRC='$scratch/not-a-clone' XVK_REPO='file://$repo' bash -s -- --help < '$PROJECT_DIR/install.sh'"

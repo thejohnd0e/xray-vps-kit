@@ -31,6 +31,7 @@ make_legacy_core_runtime() (
 53f0e66b2d3a9dc757f6a828a27613271980e31b0975abbcc7f4e8d361935a23 transaction.sh
 0836355c03f6738f7ea466ba9ef5f6ae243e7ab9dd046ec7c40297e665837069 snapshot.sh
 dddd8340fb17d388cb9b82e7b8623fe853e8d53a0a59b0057052c582bfc2b99f clients.sh
+36764df2c1543b69450688b6979587fc288293061f175c14106b01a2501d7ef5 release.sh
 LOCK
     digest=$(xvk_bundle_content_digest "$directory")
     state="$root/etc/xray-vps-kit/state.json"

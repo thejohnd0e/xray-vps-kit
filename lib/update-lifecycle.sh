@@ -3,6 +3,9 @@
 # the check/apply subshells is local by design.
 # shellcheck disable=SC2015,SC2030,SC2031
 
+# shellcheck source=lib/auto-owned.sh
+source "$(dirname -- "${BASH_SOURCE[0]}")/auto-owned.sh"
+
 xvk_update_arch() {
     case $(uname -m) in
         x86_64|amd64) printf 'amd64\n' ;;
@@ -40,17 +43,34 @@ xvk_update_validate_checkout() {
 # non-secret metadata after building the exact installable candidate bundle.
 xvk_update_build_candidate() (
     set -euo pipefail
-    local project=$1 temporary=$2 archive digest kit core bundle
+    local project=$1 temporary=$2 root=${3:-} archive digest kit core bundle installed_core pinned_core source_project
     xvk_update_validate_checkout "$project" || exit 1
+    source_project=$project
+    if [[ -n $root ]]; then
+        root=${root%/}
+        xvk_ownership_verify "$root" "$root" || exit 1
+        installed_core=$(jq -r .installed.coreVersion "$root/etc/xray-vps-kit/state.json") || exit 1
+        pinned_core=$(jq -r .version "$project/releases/xray.lock.json") || exit 1
+        if xvk_update_version_lt "${pinned_core#v}" "${installed_core#v}"; then
+            source_project="$temporary/effective-source"
+            mkdir "$source_project" || exit 1
+            cp "$project/VERSION" "$project/xray-client" "$source_project/" || exit 1
+            cp -a "$project/lib" "$project/releases" "$project/templates" "$source_project/" || exit 1
+            cp "$root/opt/xray-vps-kit/current/releases/xray.lock.json" "$source_project/releases/xray.lock.json" || exit 1
+            printf 'Keeping newer installed Xray-core %s while updating the kit.\n' "$installed_core" >&2
+        fi
+    fi
     mkdir "$temporary/bundle" || exit 1
     archive=$XVK_ARCHIVE
     if [[ -z $archive ]]; then
         mkdir "$temporary/cache" || exit 1
-        archive=$(xvk_release_acquire "$project/releases/xray.lock.json" "$XVK_ARCH" "$temporary/cache") || exit 1
+        archive=$(xvk_release_acquire "$source_project/releases/xray.lock.json" "$XVK_ARCH" "$temporary/cache") || exit 1
+    elif ! xvk_verify_sha256 "$archive" "$(jq -r --arg arch "$XVK_ARCH" '.assets[$arch].sha256' "$source_project/releases/xray.lock.json")"; then
+        xvk_error 'Local archive does not match the effective core lock (newer installed core is preserved)'; exit 1
     fi
-    digest=$(xvk_bundle_build "$project" "$archive" "$temporary/bundle") || exit 1
+    digest=$(xvk_bundle_build "$source_project" "$archive" "$temporary/bundle") || exit 1
     kit=$(cat "$project/VERSION") || exit 1
-    core=$(jq -r .version "$project/releases/xray.lock.json") || exit 1
+    core=$(jq -r .version "$source_project/releases/xray.lock.json") || exit 1
     bundle="$kit-$core-$digest"
     printf '%s\t%s\t%s\t%s\n' "$kit" "$core" "$digest" "$bundle"
 )
@@ -84,7 +104,7 @@ xvk_update_check() (
     xvk_update_require_install "$root" || exit 1
     temporary=$(mktemp -d) || exit 1
     trap 'rm -rf -- "$temporary"' EXIT
-    metadata=$(xvk_update_build_candidate "$project" "$temporary") || exit 1
+    metadata=$(xvk_update_build_candidate "$project" "$temporary" "${root:-/}") || exit 1
     IFS=$'\t' read -r kit core digest bundle <<< "$metadata"
     installed_bundle=$(jq -r .installed.bundleId "$cfg/state.json") || exit 1
     installed_kit=$(jq -r .installed.kitVersion "$cfg/state.json") || exit 1
@@ -144,9 +164,10 @@ xvk_update_write_stage_manifest() {
 xvk_update_rollback_locked() (
     set -euo pipefail
     local root=${1%/} cfg filesystem_root snapshot_name snapshot current_target snapshot_target
-    local current_generation old_bundle core stage firewall
+    local current_generation old_bundle core stage firewall previous_control=null rollback_completed=false status
     filesystem_root=$root
     cfg="$filesystem_root/etc/xray-vps-kit"
+    xvk_auto_verify "$root" || { xvk_error 'Automatic-update resources have drifted; rollback refused'; exit 1; }
     snapshot_name=$(jq -r '.lastSuccessfulSnapshot // empty' "$cfg/state.json") || exit 1
     [[ $snapshot_name =~ ^snapshot-[0-9]+-[a-f0-9]{16}$ ]] || {
         xvk_error 'No valid previous update snapshot is available'; exit 1;
@@ -166,7 +187,7 @@ xvk_update_rollback_locked() (
     [[ -x $core ]] || { xvk_error 'Previous bundle core is missing'; exit 1; }
     stage=$(mktemp -d "$cfg/.stage.XXXXXXXX") || exit 1
     chmod 700 "$stage" || exit 1
-    trap 'rm -rf -- "$stage"' EXIT
+    trap 'status=$?; rm -rf -- "$stage"; if [[ $rollback_completed != true && $previous_control != null ]]; then xvk_auto_restore_control "$root" "$previous_control" || xvk_error "Automatic updates remain paused: could not restore prior scheduling state"; fi; exit "$status"' EXIT
     xvk_update_prepare_stage '' "$root" "$cfg" "$stage" "$snapshot/etc/xray-vps-kit/state.json" \
         "$((current_generation + 1))" || exit 1
     firewall=$(jq -c .firewallRule "$snapshot/etc/xray-vps-kit/ownership.json") || exit 1
@@ -174,7 +195,12 @@ xvk_update_rollback_locked() (
     "$core" run -test -config "$stage/etc/xray-vps-kit/config.json" > /dev/null 2>&1 || {
         xvk_error 'Previous core rejected its preserved config'; exit 1;
     }
+    previous_control=$(xvk_auto_pause "$root") || { xvk_error 'Could not pause automatic updates before rollback'; exit 1; }
     xvk_transaction_apply "$root" "$stage" "${XVK_UPDATE_HOOK:-xvk_service_hook}" || exit 1
+    rollback_completed=true
+    if [[ $previous_control != null ]] && [[ $(jq -r .mode <<< "$previous_control") == enabled ]]; then
+        printf 'Automatic updates paused after manual rollback; run auto-update.sh enable to resume.\n'
+    fi
     printf 'Rolled back to kit %s; client identities were preserved.\n' \
         "$(jq -r .installed.kitVersion "$cfg/state.json")"
 )
@@ -199,7 +225,7 @@ xvk_update_locked() (
     xvk_update_validate_checkout "$project" || exit 1
     temporary=$(mktemp -d) || exit 1
     trap 'status=$?; if [[ $committed != true && $bundle_written == true && -n $bundle_dir ]]; then if ! xvk_bundle_remove "$bundle_dir" "$digest"; then xvk_error "Uncommitted candidate bundle retained at $bundle_dir"; fi; fi; if [[ -n $bundle_stage && $bundle_stage == "$release_root"/.update.* && -d $bundle_stage ]]; then rm -rf -- "$bundle_stage"; fi; if [[ -n $stage && $stage == "$cfg"/.stage.* && -d $stage ]]; then rm -rf -- "$stage"; fi; rm -rf -- "$temporary"; exit "$status"' EXIT
-    metadata=$(xvk_update_build_candidate "$project" "$temporary") || exit 1
+    metadata=$(xvk_update_build_candidate "$project" "$temporary" "${root:-/}") || exit 1
     IFS=$'\t' read -r kit core digest bundle <<< "$metadata"
     installed_bundle=$(jq -r .installed.bundleId "$cfg/state.json") || exit 1
     installed_kit=$(jq -r .installed.kitVersion "$cfg/state.json") || exit 1

@@ -26,7 +26,7 @@ while (( $# )); do
         *) usage >&2; exit 1 ;;
     esac
 done
-required=(harness validation release render transaction install clients export-doctor update uninstall e2e coexistence packaging docs)
+required=(harness validation release render transaction install clients export-doctor update uninstall e2e coexistence packaging docs auto-update)
 if [[ $suite == all ]]; then
     [[ $case_seen == false ]] || { printf 'A case requires an explicit suite\n' >&2; exit 1; }
     suites=("${required[@]}")

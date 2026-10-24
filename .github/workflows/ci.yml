@@ -33,7 +33,7 @@ jobs:
           sudo apt-get install -y jq curl unzip openssl qrencode zbar-tools iproute2
       - name: Sandbox suites
         run: |
-          for suite in harness validation release render transaction install clients export-doctor update uninstall coexistence docs packaging; do
+          for suite in harness validation release render transaction install clients export-doctor update uninstall coexistence docs packaging auto-update; do
             bash tests/run.sh --suite "$suite"
           done
       - name: Real REALITY traffic (network namespace)

@@ -38,6 +38,7 @@ docs_flags() {
         bash "$PROJECT_DIR/install.sh" --help
         bash "$PROJECT_DIR/update.sh" --help
         bash "$PROJECT_DIR/uninstall.sh" --help
+        bash "$PROJECT_DIR/auto-update.sh" --help
         bash "$PROJECT_DIR/xray-client" help
     ) || { printf 'could not read the help texts\n' >&2; return 1; }
     while IFS= read -r flag; do
@@ -146,6 +147,9 @@ if [[ $selected == all || $selected == documented-lifecycle-and-links ]]; then
     assert_failure 'the removed --uri flag is rejected' bash "$manager" show user_01 --uri
     assert_success 'documented update --check on the same checkout' \
         bash "$PROJECT_DIR/update.sh" --check --root "$root" --archive "$archive"
+    assert_success 'documented optional auto-update enable' bash "$PROJECT_DIR/auto-update.sh" enable --root "$root"
+    assert_success 'documented optional auto-update status' bash "$root/opt/xray-vps-kit-auto-update/auto-update.sh" status --root "$root"
+    assert_success 'documented optional auto-update disable' bash "$root/opt/xray-vps-kit-auto-update/auto-update.sh" disable --root "$root"
     assert_success 'documented uninstall --keep-config' bash "$PROJECT_DIR/uninstall.sh" --root "$root" --yes --keep-config
     assert_success 'documented install --restore' \
         bash "$PROJECT_DIR/install.sh" --restore --non-interactive --no-service --root "$root" --archive "$archive"

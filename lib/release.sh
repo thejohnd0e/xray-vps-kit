@@ -22,10 +22,15 @@ xvk_https_get() {
     # replace the archive checksum check performed before every extraction.
     # A progress bar only on a terminal; logs and pipes stay quiet.
     local quiet=(--silent --show-error)
+    local maximum=() maximum_value=${3:-}
+    if [[ -n $maximum_value ]]; then
+        [[ $maximum_value =~ ^[1-9][0-9]{0,8}$ ]] || return 1
+        maximum=(--max-filesize "$maximum_value")
+    fi
     [[ ! -t 2 ]] || quiet=(--progress-bar)
     curl --fail "${quiet[@]}" --location --proto '=https' --proto-redir '=https' \
         --connect-timeout 10 --max-time 180 --retry 2 --retry-max-time 360 \
-        --output "$2" "$1"
+        "${maximum[@]}" --output "$2" "$1"
 }
 
 xvk_verify_sha256() {
@@ -88,7 +93,8 @@ xvk_release_extract() {
 
 xvk_release_acquire() (
     set -euo pipefail
-    local lock=$1 arch=$2 cache=$3 expected name url archive temporary
+    local lock=$1 arch=$2 cache=$3 max_bytes=${4:-} expected name url archive temporary
+    [[ -z $max_bytes || $max_bytes =~ ^[1-9][0-9]{0,8}$ ]] || exit 1
     xvk_release_validate_lock "$lock" || exit 1
     case $arch in amd64|arm64) ;; *) exit 1 ;; esac
     xvk_no_symlink_path "$cache" && [[ -d $cache ]] || exit 1
@@ -102,10 +108,13 @@ xvk_release_acquire() (
         temporary=$(xvk_private_temp "$cache") || exit 1
         trap 'rm -f -- "$temporary"' EXIT
         printf 'Downloading Xray-core %s (%s, about 20 MB)...\n' "$(jq -r .version "$lock")" "$name" >&2
-        xvk_https_get "$url" "$temporary" || exit 1
+        xvk_https_get "$url" "$temporary" "$max_bytes" || exit 1
         xvk_verify_sha256 "$temporary" "$expected" || { xvk_error 'Downloaded archive mismatch'; exit 1; }
         # noclobber publishing: concurrent cache writers cannot replace data.
         ln -- "$temporary" "$archive" || xvk_verify_sha256 "$archive" "$expected" || exit 1
+    fi
+    if [[ -n $max_bytes ]] && (( $(stat -c %s "$archive") > max_bytes )); then
+        xvk_error 'Archive exceeds the configured download size bound'; exit 1
     fi
     printf '%s\n' "$archive"
 )
