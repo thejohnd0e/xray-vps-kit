@@ -40,6 +40,7 @@ docs_flags() {
         bash "$PROJECT_DIR/uninstall.sh" --help
         bash "$PROJECT_DIR/auto-update.sh" --help
         bash "$PROJECT_DIR/xray-client" help
+        bash "$PROJECT_DIR/block-ping" help
     ) || { printf 'could not read the help texts\n' >&2; return 1; }
     while IFS= read -r flag; do
         [[ $external_flags == *" $flag "* ]] && continue

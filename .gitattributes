@@ -7,3 +7,4 @@
 *.patch text eol=lf
 *.jq text eol=lf
 *.template text eol=lf
+/block-ping text eol=lf

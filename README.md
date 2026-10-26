@@ -215,6 +215,29 @@ journalctl -u xray-vps-kit -n 30 --no-pager   # if it does not start
 xray-client doctor
 ```
 
+## Hiding the server from ping: `block-ping`
+
+Some sites measure round-trip times to the server and to the client and flag the difference
+as a tunnel (for example the "double-sided ping" check on 2ip.io). Dropping incoming ping on
+the server removes that signal. It is only one of several signals (TCP timing and IP
+reputation, for example), so it does not hide the server from every kind of detection.
+
+```bash
+block-ping on                  # drop incoming ping on the uplink, also after reboot
+block-ping on --wan-if eth0    # choose the interface(s) yourself (comma separated)
+block-ping status              # active or not, dropped packets
+block-ping off                 # remove it completely
+```
+
+- `block-ping` is a standalone script, independent of the Xray service: it is not part of the
+  installed bundle and `uninstall.sh` does not remove it (run `block-ping off` first).
+- It works with or without ufw/firewalld: it uses its own nftables table (`inet block_ping`,
+  input hook, priority -10) that runs before them and does not touch their rules. IPv4 and IPv6.
+- Only echo requests are dropped; other ICMP (errors, path MTU, neighbour discovery) stays.
+- Ping-based monitoring of the server will report it as down. It is off by default.
+- Run it from a checkout (`sudo ./block-ping on`) or fetch it directly:
+  `curl -fsSL https://raw.githubusercontent.com/thejohnd0e/xray-vps-kit/master/block-ping -o block-ping && sudo bash block-ping on`
+
 ## Updating
 
 ```bash
