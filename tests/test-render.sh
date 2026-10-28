@@ -41,6 +41,12 @@ if [[ $selected != malformed-state-and-future-transport ]]; then
     assert_success 'existing REALITY profile format matches portable fixture' cmp -s "$scratch/expected-uri" "$scratch/uri"
     xvk_render_uri "$scratch/state.json" test-device > "$scratch/uri-again"
     assert_success 'repeat export is byte-identical' cmp -s "$scratch/uri" "$scratch/uri-again"
+    assert_success 'default fingerprint is chrome' grep -q -F '&fp=chrome&' "$scratch/uri"
+    xvk_render_uri "$scratch/state.json" test-device firefox > "$scratch/uri-firefox"
+    assert_success 'firefox fingerprint is written into the URI' grep -q -F '&fp=firefox&' "$scratch/uri-firefox"
+    assert_success 'only the fingerprint differs between profiles' cmp -s "$scratch/uri-firefox" <(sed 's/&fp=chrome&/\&fp=firefox\&/' "$scratch/uri")
+    assert_failure 'unknown fingerprint is refused' xvk_render_uri "$scratch/state.json" test-device bogus
+    assert_failure 'fingerprint cannot smuggle extra URI parameters' xvk_render_uri "$scratch/state.json" test-device 'chrome&sni=evil.example'
     assert_eq 'hello%20%26%20%2B%2F%23%E2%98%83' "$(xvk_url_component 'hello & +/#☃')" 'UTF-8 values encode as URL components'
     assert_success 'routing uses explicit IP blocks, no geo-data' jq -e '.routing.domainStrategy == "IPOnDemand" and (.routing.rules[0].ip | index("169.254.0.0/16") != null) and .inbounds[0].sniffing.enabled == false' "$scratch/config.json"
     for client_count in 0 2; do

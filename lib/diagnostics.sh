@@ -4,11 +4,12 @@
 # labeled check results only and never prints a URI, private key or UUID.
 
 xvk_client_show_qr() {
-    local root=${1%/} name=${2:-} cfg uri
+    local root=${1%/} name=${2:-} fp=${3:-chrome} cfg uri
     cfg="${root%/}/etc/xray-vps-kit"
     xvk_client_require_install "$root" || return 1
     xvk_validate_name "$name" || { xvk_error 'Invalid client name'; return 1; }
-    uri=$(xvk_render_uri "$cfg/state.json" "$name") || { xvk_error 'No such client'; return 1; }
+    xvk_validate_fp "$fp" || { xvk_error 'Invalid fingerprint'; return 1; }
+    uri=$(xvk_render_uri "$cfg/state.json" "$name" "$fp") || { xvk_error 'No such client'; return 1; }
     xvk_require_commands qrencode || return 1
     # Pipe the bare URI without a trailing newline so the encoded payload and
     # the URI line of `show` are the same bytes apart from that newline.
@@ -17,30 +18,32 @@ xvk_client_show_qr() {
 
 # Prints the URI and its QR code, the profile a person imports into a client app.
 xvk_client_print_profile() {
-    local root=${1%/} name=${2:-} cfg uri
+    local root=${1%/} name=${2:-} fp=${3:-chrome} cfg uri
     cfg="${root%/}/etc/xray-vps-kit"
     xvk_client_require_install "$root" || return 1
     xvk_validate_name "$name" || { xvk_error 'Invalid client name'; return 1; }
-    uri=$(xvk_render_uri "$cfg/state.json" "$name") || { xvk_error 'No such client'; return 1; }
+    xvk_validate_fp "$fp" || { xvk_error 'Invalid fingerprint'; return 1; }
+    uri=$(xvk_render_uri "$cfg/state.json" "$name" "$fp") || { xvk_error 'No such client'; return 1; }
     printf 'Client %s
 URI:
 %s
 
 QR code:
 ' "$name" "$uri"
-    xvk_client_show_qr "$root" "$name"
+    xvk_client_show_qr "$root" "$name" "$fp"
 }
 
 xvk_client_export() {
-    local root=${1%/} name=${2:-} output=${3:-} cfg uri
+    local root=${1%/} name=${2:-} output=${3:-} fp=${4:-chrome} cfg uri
     cfg="${root%/}/etc/xray-vps-kit"
     xvk_client_require_install "$root" || return 1
     xvk_validate_name "$name" || { xvk_error 'Invalid client name'; return 1; }
     [[ -n $output ]] || { xvk_error 'Usage: xray-client export NAME --output FILE'; return 1; }
     [[ $output == /* ]] || { xvk_error 'Export path must be absolute'; return 1; }
+    xvk_validate_fp "$fp" || { xvk_error 'Invalid fingerprint'; return 1; }
     xvk_no_symlink_path "$output" || { xvk_error 'Refusing unsafe export path'; return 1; }
     [[ ! -e $output && ! -L $output ]] || { xvk_error 'Refusing to overwrite an existing export'; return 1; }
-    uri=$(xvk_render_uri "$cfg/state.json" "$name") || { xvk_error 'No such client'; return 1; }
+    uri=$(xvk_render_uri "$cfg/state.json" "$name" "$fp") || { xvk_error 'No such client'; return 1; }
     # Exclusive creation: noclobber plus a fresh umask means the file can never
     # be an existing target and is mode 0600 from birth.
     ( umask 077; set -C; printf '%s\n' "$uri" > "$output" ) || {
@@ -83,5 +86,9 @@ xvk_client_doctor() {
     printf 'xray-vps-kit doctor\n'
     cat "$report"
     printf 'Checks failed: %s\n' "$issues"
+    # Static advice, not a check: a server cannot see a path problem on the client side.
+    printf 'Note: if a client connects only part of the time (connections stall after the first\n'
+    printf 'packet), its large Chrome TLS hello may be cut on the way. Regenerate that profile with\n'
+    printf '  xray-client show NAME --fp firefox\n'
     (( issues == 0 ))
 }

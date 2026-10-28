@@ -14,17 +14,32 @@ help_text() {
     cat <<'HELP'
 xray-client: manage VLESS + REALITY clients (run as root)
 
-  xray-client add NAME                    create a client, print its URI and QR code
+  xray-client add NAME [--fp FP]          create a client, print its URI and QR code
   xray-client list                        list clients
-  xray-client show NAME                   print the URI and QR code again (URI to a file: export)
-  xray-client export NAME --output FILE   write the URI to FILE (mode 0600)
+  xray-client show NAME [--fp FP]         print the URI and QR code again (URI to a file: export)
+  xray-client export NAME --output FILE [--fp FP]
+                                          write the URI to FILE (mode 0600)
   xray-client remove NAME                 revoke a client; that device disconnects
   xray-client doctor                      health report (never prints keys, UUIDs or URIs)
   xray-client version                     kit and Xray-core versions
   xray-client help                        this text
 
 NAME: letters, digits, _ - @ and . (e.g. an email). One client per device is recommended.
+FP: TLS fingerprint written into the URI (chrome, firefox, safari, ios, android, edge, random,
+randomized; default chrome). It is a client-side setting, stored nowhere: pass it again for each
+output. Try firefox if a client connects only part of the time.
 HELP
+}
+
+# Sets fp from an optional trailing "--fp VALUE"; fails on any other extra argument.
+parse_fp() {
+    fp=chrome
+    case $# in
+        0) ;;
+        2) [[ $1 == --fp ]] || return 1; fp=$2 ;;
+        *) return 1 ;;
+    esac
+    xvk_validate_fp "$fp" || { xvk_error "Invalid fingerprint '$fp' (see xray-client help)"; return 1; }
 }
 
 management_root() {
@@ -46,9 +61,10 @@ case ${1:-help} in
         printf 'xray-vps-kit %s; core %s\n' \
             "$(cat "$bundle/VERSION")" "$(jq -r .version "$bundle/releases/xray.lock.json")" ;;
     add)
-        (( $# == 2 )) || { usage >&2; exit 1; }
+        (( $# == 2 || $# == 4 )) || { usage >&2; exit 1; }
+        parse_fp "${@:3}" || { usage >&2; exit 1; }
         root=$(management_root) || exit 1
-        xvk_client_mutate "$root" add "$2" && xvk_client_print_profile "$root" "$2" ;;
+        xvk_client_mutate "$root" add "$2" && xvk_client_print_profile "$root" "$2" "$fp" ;;
     remove)
         (( $# == 2 )) || { usage >&2; exit 1; }
         root=$(management_root) || exit 1
@@ -58,13 +74,15 @@ case ${1:-help} in
         root=$(management_root) || exit 1
         xvk_client_list "$root" ;;
     show)
-        (( $# == 2 )) || { usage >&2; exit 1; }
+        (( $# == 2 || $# == 4 )) || { usage >&2; exit 1; }
+        parse_fp "${@:3}" || { usage >&2; exit 1; }
         root=$(management_root) || exit 1
-        xvk_client_print_profile "$root" "$2" ;;
+        xvk_client_print_profile "$root" "$2" "$fp" ;;
     export)
-        if (( $# != 4 )) || [[ $3 != --output ]]; then usage >&2; exit 1; fi
+        if (( $# != 4 && $# != 6 )) || [[ $3 != --output ]]; then usage >&2; exit 1; fi
+        parse_fp "${@:5}" || { usage >&2; exit 1; }
         root=$(management_root) || exit 1
-        xvk_client_export "$root" "$2" "$4" ;;
+        xvk_client_export "$root" "$2" "$4" "$fp" ;;
     doctor)
         (( $# == 1 )) || { usage >&2; exit 1; }
         root=$(management_root) || exit 1

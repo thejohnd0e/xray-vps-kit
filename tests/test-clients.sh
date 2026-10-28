@@ -25,6 +25,16 @@ if [[ $selected != failed-add-and-remove ]]; then
     bash "$manager" show phone | grep '^vless://' > "$scratch/profile"
     jq '.clients |= map(select(.name=="phone"))' "$state" > "$scratch/selected-state.json"
     assert_success 'show profile independently parses to stored identity' python3 "$TESTS_DIR/helpers/uri-check.py" "$scratch/selected-state.json" "$scratch/profile"
+    bash "$manager" show phone --fp firefox | grep '^vless://' > "$scratch/profile-firefox"
+    assert_success 'show --fp firefox prints that fingerprint' grep -q -F '&fp=firefox&' "$scratch/profile-firefox"
+    assert_success 'show --fp changes only the fingerprint' cmp -s "$scratch/profile-firefox" <(sed 's/&fp=chrome&/\&fp=firefox\&/' "$scratch/profile")
+    assert_failure 'show with an unknown fingerprint fails' bash "$manager" show phone --fp bogus
+    assert_failure 'show with a stray argument fails' bash "$manager" show phone --fingerprint firefox
+    bash "$manager" add fpdevice --fp safari | grep '^vless://' > "$scratch/add-safari"
+    assert_success 'add --fp safari prints that fingerprint' grep -q -F '&fp=safari&' "$scratch/add-safari"
+    assert_failure 'add with an unknown fingerprint creates no client' bash "$manager" add fpbad --fp bogus
+    assert_failure 'rejected fingerprint left no client behind' bash "$manager" show fpbad
+    bash "$manager" remove fpdevice
     phone_uuid=$(jq -r '.clients[]|select(.name=="phone")|.uuid' "$state")
     phone_sid=$(jq -r '.clients[]|select(.name=="phone")|.shortId' "$state")
     survivor=$(jq -c '.clients[]|select(.name=="tablet")' "$state")

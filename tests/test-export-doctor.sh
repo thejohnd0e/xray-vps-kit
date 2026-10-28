@@ -30,6 +30,12 @@ QR
     chmod 755 "$scratch/qr-bin/qrencode"
     bash "$manager" show main-user | grep '^vless://' > "$scratch/uri"
     assert_success 'URI export parses independently' python3 "$TESTS_DIR/helpers/uri-check.py" "$state" "$scratch/uri"
+    bash "$manager" show main-user --fp firefox | grep '^vless://' > "$scratch/uri-firefox"
+    assert_success 'show --fp firefox emits the firefox profile' grep -q -F '&fp=firefox&' "$scratch/uri-firefox"
+    assert_success 'export --fp writes the same bytes as show --fp' bash "$manager" export main-user --output "$scratch/export-firefox" --fp firefox
+    assert_success 'fingerprint export matches show including LF' cmp -s "$scratch/uri-firefox" "$scratch/export-firefox"
+    assert_failure 'export with an unknown fingerprint is refused' bash "$manager" export main-user --output "$scratch/export-bad" --fp bogus
+    assert_failure 'refused fingerprint export created no file' test -e "$scratch/export-bad"
     assert_success 'text export creates a new private file' bash "$manager" export main-user --output "$scratch/export"
     assert_eq 600 "$(stat -c %a "$scratch/export")" 'export mode is0600'
     assert_success 'URI and exported bytes match exactly including LF' cmp -s "$scratch/uri" "$scratch/export"
@@ -50,6 +56,7 @@ if [[ $selected != uri-text-qr-equivalence ]]; then
     doctor_status=0
     bash "$manager" doctor > "$scratch/doctor" 2>&1 || doctor_status=$?
     assert_failure 'sandbox doctor cannot falsely report live service health' test "$doctor_status" -eq 0
+    assert_success 'doctor ends with the fingerprint note' grep -q -F 'xray-client show NAME --fp firefox' "$scratch/doctor"
     for secret in "$(jq -r .privateKey "$state")" "$(jq -r '.clients[0].uuid' "$state")"; do
         assert_failure 'doctor output contains no credential sentinel' grep -Fq "$secret" "$scratch/doctor"
     done

@@ -191,10 +191,10 @@ Run as root.
 
 ```bash
 xray-client help                         # short help
-xray-client add <name>                   # create a client, print its URI + QR code
+xray-client add <name> [--fp FP]         # create a client, print its URI + QR code
 xray-client list                         # clients
-xray-client show <name>                  # print the URI + QR code of an existing client
-xray-client export <name> --output FILE  # URI only, to a new file with mode 0600
+xray-client show <name> [--fp FP]        # print the URI + QR code of an existing client
+xray-client export <name> --output FILE [--fp FP]  # URI only, to a new file with mode 0600
 xray-client remove <name>                # revoke a client
 xray-client doctor                       # health report (never prints keys, UUIDs or URIs)
 xray-client version                      # kit and Xray-core versions
@@ -206,6 +206,14 @@ xray-client version                      # kit and Xray-core versions
   restored. Removing a client disconnects that device for good.
 - Import the URI (or scan the QR code) in a VLESS + REALITY client. See
   "Client compatibility" for what has and has not been tested.
+- `--fp` sets the TLS fingerprint written into the URI: `chrome` (default), `firefox`, `safari`,
+  `ios`, `android`, `edge`, `random` or `randomized`. It is a client-side setting: the server
+  accepts any of them, nothing is stored, and the option has to be given again on every `add`,
+  `show` and `export`. Try `--fp firefox` if a client connects only part of the time. In one
+  measurement from a home network to one tested server, a `chrome` profile connected in 4 of 20
+  attempts and a `firefox` profile in 43 of 45: the larger `chrome` hello (it carries a
+  post-quantum key share) was cut after its first TCP segment. Other servers and networks did not
+  show this, so treat it as a workaround to try, not as a rule.
 
 ## Service and diagnostics
 
@@ -214,6 +222,9 @@ systemctl status xray-vps-kit
 journalctl -u xray-vps-kit -n 30 --no-pager   # if it does not start
 xray-client doctor
 ```
+
+`doctor` checks the server side only. It ends with a fixed note about `--fp`, because a path
+problem between a client and the server is not visible from the server.
 
 ## Hiding the server from ping: `block-ping`
 

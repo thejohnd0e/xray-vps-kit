@@ -23,6 +23,8 @@ xvk_validate_port() {
 }
 
 xvk_validate_name() { [[ ${1:-} =~ ^[A-Za-z0-9_@.-]{1,32}$ ]]; }
+# TLS client fingerprints a profile may name; fp is a client-side setting, the server accepts any.
+xvk_validate_fp() { [[ ${1:-} =~ ^(chrome|firefox|safari|ios|android|edge|random|randomized)$ ]]; }
 
 xvk_validate_host() {
     local host=${1:-} label octet
