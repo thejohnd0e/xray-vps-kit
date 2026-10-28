@@ -7,6 +7,7 @@ Usage: bash install.sh [OPTIONS]
   --server-name DNS       Verified REALITY SNI (default:github.com)
   --first-client NAME     First identity (default:main-user)
   --no-first-client       Do not create an initial identity
+  --fp FP                 TLS fingerprint in the first client's printed URI (default:chrome)
   --endpoint IPV4_OR_DNS  Public endpoint; otherwise discover IPv4 via HTTPS
   --target HOST:PORT      REALITY target (default:selected SNI:443)
   --non-interactive       Use validated defaults/flags without questions
@@ -18,18 +19,19 @@ HELP
 }
 
 xvk_install_options() {
-    XVK_PORT=443 XVK_SNI=github.com XVK_FIRST=main-user XVK_ENDPOINT='' XVK_TARGET=''
+    XVK_PORT=443 XVK_SNI=github.com XVK_FIRST=main-user XVK_FP=chrome XVK_ENDPOINT='' XVK_TARGET=''
     XVK_ROOT=/ XVK_ARCHIVE='' XVK_AUTOMATION=false XVK_SANDBOX=false XVK_RESTORE=false
-    XVK_PORT_SET=false XVK_SNI_SET=false XVK_FIRST_SET=false XVK_TARGET_SET=false
+    XVK_PORT_SET=false XVK_SNI_SET=false XVK_FIRST_SET=false XVK_TARGET_SET=false XVK_FP_SET=false
     XVK_FRESH_FLAGS=false XVK_NO_FIRST=false
     while (( $# )); do
         case $1 in
-            --port|--server-name|--first-client|--endpoint|--target|--root|--archive)
+            --port|--server-name|--first-client|--fp|--endpoint|--target|--root|--archive)
                 xvk_require_value "$@" || return 1
                 case $1 in
                     --port) XVK_PORT=$2; XVK_PORT_SET=true; XVK_FRESH_FLAGS=true ;;
                     --server-name) XVK_SNI=$2; XVK_SNI_SET=true; XVK_FRESH_FLAGS=true ;;
                     --first-client) XVK_FIRST=$2; XVK_FIRST_SET=true; XVK_FRESH_FLAGS=true ;;
+                    --fp) XVK_FP=$2; XVK_FP_SET=true; XVK_FRESH_FLAGS=true ;;
                     --endpoint) XVK_ENDPOINT=$2; XVK_FRESH_FLAGS=true ;;
                     --target) XVK_TARGET=$2; XVK_TARGET_SET=true; XVK_FRESH_FLAGS=true ;;
                     --root) XVK_ROOT=$2 ;;
@@ -44,6 +46,7 @@ xvk_install_options() {
         esac
     done
     [[ $XVK_FIRST_SET != true || $XVK_NO_FIRST != true ]] || { xvk_error 'Conflicting first-client flags'; return 1; }
+    [[ $XVK_FP_SET != true || $XVK_NO_FIRST != true ]] || { xvk_error '--fp needs a first client'; return 1; }
     [[ $XVK_RESTORE != true || $XVK_FRESH_FLAGS != true ]] || { xvk_error 'Restore rejects fresh setup flags'; return 1; }
     if [[ $XVK_SANDBOX == true ]]; then
         if [[ $XVK_ROOT == / ]] || ! xvk_validate_test_root "$XVK_ROOT"; then xvk_error 'Invalid testing root'; return 1; fi
@@ -56,6 +59,7 @@ xvk_install_options() {
     if [[ $XVK_RESTORE != true ]]; then
         if ! xvk_validate_port "$XVK_PORT" || ! xvk_validate_host "$XVK_SNI"; then xvk_error 'Invalid port or SNI'; return 1; fi
         [[ $XVK_NO_FIRST == true ]] || xvk_validate_name "$XVK_FIRST" || { xvk_error 'Invalid first client'; return 1; }
+        xvk_validate_fp "$XVK_FP" || { xvk_error 'Invalid fingerprint (see install.sh --help)'; return 1; }
         [[ -z $XVK_ENDPOINT ]] || xvk_validate_host "$XVK_ENDPOINT" || { xvk_error 'Invalid endpoint'; return 1; }
         [[ $XVK_TARGET_SET != true ]] || xvk_validate_target "$XVK_TARGET" || { xvk_error 'Invalid target'; return 1; }
     fi

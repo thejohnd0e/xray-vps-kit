@@ -52,6 +52,9 @@ if [[ $selected == all || $selected == sandbox-and-restore ]]; then
     assert_eq 600 "$(stat -c %a "$root/etc/xray-vps-kit/state.json")" 'private state permissions'
     assert_eq 640 "$(stat -c %a "$root/etc/xray-vps-kit/config.json")" 'service config permissions'
     assert_success 'installed manager resolves without source checkout' bash "$root/usr/local/bin/xray-client" version
+    root_fp=$(mktemp -d "$scratch/root.XXXXXXXX")
+    assert_success 'installer accepts a valid --fp for the first client' \
+        bash "$PROJECT_DIR/install.sh" --non-interactive --no-service --root "$root_fp" --endpoint 203.0.113.7 --fp firefox --archive "$archive"
     assert_failure 'repeat ordinary install refuses state' \
         bash "$PROJECT_DIR/install.sh" --non-interactive --no-service --root "$root" --endpoint 203.0.113.7 --archive "$archive"
     root_empty=$(mktemp -d "$scratch/root.XXXXXXXX")
@@ -77,7 +80,7 @@ fi
 if [[ $selected == all || $selected == preflight-and-start-failure || $selected == cancellation-and-noninteractive-errors ]]; then
     assert_success 'help is noninteractive' bash "$PROJECT_DIR/install.sh" --help
     assert_failure 'non-TTY without explicit automation refuses before reads' timeout 3 bash "$PROJECT_DIR/install.sh"
-    for args in '--port' '--port 0' '--port 65536' '--server-name bad/host' '--first-client ../bad' '--first-client x --no-first-client' '--root / --no-service' '--restore --port 443' '--unknown'; do
+    for args in '--port' '--port 0' '--port 65536' '--server-name bad/host' '--first-client ../bad' '--first-client x --no-first-client' '--fp' '--fp bogus' '--fp firefox --no-first-client' '--restore --fp firefox' '--root / --no-service' '--restore --port 443' '--unknown'; do
         # This fixed test matrix deliberately splits words, never evals them.
         read -r -a arguments <<< "$args"
         assert_failure 'malformed flags fail before mutation' bash "$PROJECT_DIR/install.sh" --non-interactive "${arguments[@]}"

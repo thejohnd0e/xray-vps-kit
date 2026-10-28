@@ -142,6 +142,7 @@ git clone https://github.com/thejohnd0e/xray-vps-kit.git && cd xray-vps-kit
 | `--target HOST:PORT` | `<SNI>:443` | REALITY target |
 | `--first-client NAME` | `main-user` | first identity |
 | `--no-first-client` | | do not create an identity |
+| `--fp FP` | `chrome` | TLS fingerprint in the URI printed for the first client (same values as `xray-client --fp`; not stored) |
 | `--endpoint IPV4/HOST` | auto (HTTPS lookup) | address written into client URIs |
 | `--restore` | | recreate the service from preserved config (after `uninstall --keep-config`) |
 | `--archive FILE` | download | local Xray-core archive; the pinned SHA256 is still checked |
