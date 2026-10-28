@@ -216,6 +216,11 @@ xray-client version                      # kit and Xray-core versions
   post-quantum key share) was cut after its first TCP segment. Other servers and networks did not
   show this, so treat it as a workaround to try, not as a rule.
 
+```bash
+xray-client add phone --fp firefox       # new client: URI and QR with the firefox fingerprint
+xray-client show phone --fp firefox      # the same profile later (the option is not stored)
+```
+
 ## Service and diagnostics
 
 ```bash
