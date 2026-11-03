@@ -52,4 +52,25 @@ assert_success 'concurrent client identity survives the core-only update' jq -e 
 assert_failure 'successful update preserves legacy command-link absence' test -L "$root/usr/local/bin/xray"
 assert_success 'genuine old manager adds clients after automatic core update' bash "$root/usr/local/bin/xray-client" add after-auto
 assert_success 'genuine old manager removes clients after automatic core update' bash "$root/usr/local/bin/xray-client" remove after-auto
+
+# A failed rollback can leave the new core selected. That bundle is the only
+# runnable core then, so candidate cleanup must retain it.
+make_candidate retained 26.10.23
+before_bundle=$(readlink "$root/opt/xray-vps-kit/current")
+auto_fail_activation_damaging_snapshot() {
+    local action=$1 rootdir=${3%/}
+    if [[ $action == activate ]]; then
+        find "$rootdir/etc/xray-vps-kit/backups" -name state.json -type f -exec sh -c 'printf tamper >> "$1"' _ {} \;
+        return 1
+    fi
+    xvk_service_hook "$@"
+}
+assert_failure 'failed activation whose rollback fails reports failure' \
+    xvk_with_lock "$root/run/lock/xray-vps-kit.lock" xvk_core_apply_locked "$root" "$scratch/retained" \
+        "$(cat "$scratch/retained.base")" false auto_fail_activation_damaging_snapshot
+retained_bundle=$(readlink "$root/opt/xray-vps-kit/current")
+assert_failure 'failed rollback leaves the new core selected' test "$retained_bundle" = "$before_bundle"
+assert_success 'the still-selected core bundle was retained, not deleted' \
+    test -x "$root/opt/xray-vps-kit/$retained_bundle/xray"
+
 test_finish

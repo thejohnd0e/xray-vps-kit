@@ -27,12 +27,21 @@ xvk_client_list() {
     jq -r '.clients[].name' "$cfg/state.json"
 }
 
-xvk_client_mutate() (
+xvk_client_mutate() {
+    local root=${1%/} operation=${2:-} name=${3:-} lock
+    lock="${root%/}/run/lock/xray-vps-kit.lock"
+    # State is read, checked and rendered only after the shared lock is held, so
+    # concurrent mutations queue instead of racing on a stale generation. One
+    # mutation can take several seconds on a slow host, so wait longer than the
+    # generic short-operation default before giving up.
+    XVK_LOCK_TIMEOUT=${XVK_LOCK_TIMEOUT:-60} xvk_with_lock "$lock" xvk_client_mutate_locked "$root" "$operation" "$name"
+}
+
+xvk_client_mutate_locked() (
     set -euo pipefail
     local root=${1%/} operation=${2:-} name=${3:-}
-    local cfg lock stage='' client bundle core firewall
+    local cfg stage='' client bundle core firewall
     cfg="${root%/}/etc/xray-vps-kit"
-    lock="${root%/}/run/lock/xray-vps-kit.lock"
     # Reads the dynamically scoped locals at EXIT; only the exact stage path
     # this invocation created is ever removed.
     trap 'if [[ -n ${stage:-} && $stage == "$cfg"/.stage.* ]]; then rm -rf -- "$stage"; fi' EXIT
@@ -86,7 +95,7 @@ xvk_client_mutate() (
     firewall=$(jq -c .firewallRule "$cfg/ownership.json") || exit 1
     xvk_ownership_manifest "$stage" "$root" "$firewall" > "$stage/etc/xray-vps-kit/ownership.json" || exit 1
     chmod 600 "$stage/etc/xray-vps-kit/ownership.json" || exit 1
-    xvk_with_lock "$lock" xvk_transaction_apply "$root" "$stage" xvk_service_hook || exit 1
+    xvk_transaction_apply "$root" "$stage" xvk_service_hook
 )
 
 xvk_client_add() {

@@ -241,7 +241,7 @@ xvk_update_locked() (
     [[ $action == apply ]] || { xvk_error 'Unsupported update action'; exit 1; }
     xvk_update_validate_checkout "$project" || exit 1
     temporary=$(mktemp -d) || exit 1
-    trap 'status=$?; if [[ $committed != true && $bundle_written == true && -n $bundle_dir ]]; then if ! xvk_bundle_remove "$bundle_dir" "$digest"; then xvk_error "Uncommitted candidate bundle retained at $bundle_dir"; fi; fi; if [[ -n $bundle_stage && $bundle_stage == "$release_root"/.update.* && -d $bundle_stage ]]; then rm -rf -- "$bundle_stage"; fi; if [[ -n $stage && $stage == "$cfg"/.stage.* && -d $stage ]]; then rm -rf -- "$stage"; fi; rm -rf -- "$temporary"; exit "$status"' EXIT
+    trap 'status=$?; if [[ $committed != true && $bundle_written == true && -n $bundle_dir ]]; then if ! xvk_bundle_remove_unselected "$filesystem_root" "$bundle_dir" "$digest"; then xvk_error "Uncommitted candidate bundle was not deleted"; fi; fi; if [[ -n $bundle_stage && $bundle_stage == "$release_root"/.update.* && -d $bundle_stage ]]; then rm -rf -- "$bundle_stage"; fi; if [[ -n $stage && $stage == "$cfg"/.stage.* && -d $stage ]]; then rm -rf -- "$stage"; fi; rm -rf -- "$temporary"; exit "$status"' EXIT
     metadata=$(xvk_update_build_candidate "$project" "$temporary" "${root:-/}") || exit 1
     IFS=$'\t' read -r kit core digest bundle <<< "$metadata"
     installed_bundle=$(jq -r .installed.bundleId "$cfg/state.json") || exit 1

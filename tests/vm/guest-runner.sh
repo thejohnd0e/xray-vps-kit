@@ -27,9 +27,15 @@ phase=${2:-run}
 (( EUID == 0 )) || { printf 'guest runner must run as root in a disposable guest\n' >&2; exit 1; }
 
 peer_ns=xvk-peer
-guest_ip=10.99.0.1
-peer_ip=10.99.0.2
+# RFC 5737 TEST-NET-2: never a real or default tunnel subnet, so a guest that
+# already runs AWG (default 10.99.0.0/24) cannot hijack the peer return path.
+guest_ip=198.51.100.1
+peer_ip=198.51.100.2
 qa_dir=/var/lib/xvk-qa
+# UDP port the echo fixture listens on. 443 is the AWG default, but a guest that
+# already runs a real AWG server owns 443/udp; then the fixture must use a free
+# port while the AWG rule itself stays in the UFW baseline.
+fixture_udp_port=443
 mkdir -p "$qa_dir" /usr/local/lib/xvk-qa
 
 say() { printf '# %s\n' "$*"; }
@@ -37,7 +43,16 @@ say() { printf '# %s\n' "$*"; }
 # ---------------------------------------------------------------- fixtures --
 
 peer_up() {
-    ip netns list | grep -q "^$peer_ns" && return 0
+    # A leftover namespace is only reusable when its link and the guest route
+    # into it survived; otherwise the peer silently talks to the wrong interface.
+    if ip netns list | grep -q "^$peer_ns"; then
+        if ip netns exec "$peer_ns" ip link show xvk-veth1 > /dev/null 2>&1 &&
+            ip route get "$peer_ip" 2> /dev/null | grep -q 'dev xvk-veth0'; then
+            return 0
+        fi
+        say "peer fixture: rebuilding stale $peer_ns namespace"
+        peer_down
+    fi
     ip netns add "$peer_ns"
     ip link add xvk-veth0 type veth peer name xvk-veth1
     ip link set xvk-veth1 netns "$peer_ns"
@@ -46,6 +61,13 @@ peer_up() {
     ip netns exec "$peer_ns" ip addr add "$peer_ip/24" dev xvk-veth1
     ip netns exec "$peer_ns" ip link set xvk-veth1 up
     ip netns exec "$peer_ns" ip link set lo up
+    local route
+    route=$(ip route get "$peer_ip" 2>&1) || true
+    if ! grep -q 'dev xvk-veth0' <<< "$route"; then
+        say "peer fixture: $peer_ip is not routed through xvk-veth0: $route"
+        say 'peer fixture: another interface claims the peer subnet; fix the guest, not the kit'
+        exit 1
+    fi
 }
 
 peer_down() {
@@ -102,11 +124,26 @@ awg_up() {
     mkdir -p /etc/amnezia/amneziawg
     [[ -f /etc/amnezia/amneziawg/awg0.conf ]] ||
         printf '[Interface]\n# xvk fixture, not a real key\nListenPort = 443\n' > /etc/amnezia/amneziawg/awg0.conf
-    cat > /etc/systemd/system/awg-fixture-echo.service <<'UNIT'
+    # Stop our own previous instance first: an already-active unit keeps its old
+    # ExecStart on `enable --now`, and its port would otherwise look occupied.
+    systemctl stop awg-fixture-echo.service 2> /dev/null || true
+    local port
+    for port in 443 51820 51821 51822; do
+        if ! ss -lunH "sport = :$port" | grep -q .; then
+            fixture_udp_port=$port
+            break
+        fi
+    done
+    if [[ $fixture_udp_port == 443 ]] && ss -lunH 'sport = :443' | grep -q .; then
+        say 'fixture: no free UDP port for the echo fixture'
+        exit 1
+    fi
+    say "UDP echo fixture listens on $fixture_udp_port"
+    cat > /etc/systemd/system/awg-fixture-echo.service <<UNIT
 [Unit]
-Description=AWG-named UDP443 echo fixture (not a tunnel)
+Description=AWG-named UDP${fixture_udp_port} echo fixture (not a tunnel)
 [Service]
-ExecStart=/usr/bin/python3 /usr/local/lib/xvk-qa/udp-echo.py 443
+ExecStart=/usr/bin/python3 /usr/local/lib/xvk-qa/udp-echo.py ${fixture_udp_port}
 Restart=always
 [Install]
 WantedBy=multi-user.target
@@ -122,7 +159,15 @@ table ip awg_nat {
 }
 NFT
     systemctl daemon-reload
-    systemctl enable --now awg-fixture-echo.service > /dev/null 2>&1
+    systemctl enable awg-fixture-echo.service > /dev/null 2>&1
+    systemctl restart awg-fixture-echo.service > /dev/null 2>&1
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+        systemctl is-active --quiet awg-fixture-echo.service && return 0
+        sleep 0.2
+    done
+    say "fixture: awg-fixture-echo.service cannot listen on UDP $fixture_udp_port"
+    systemctl status --no-pager -n 6 awg-fixture-echo.service 2>&1 | sed 's/^/# | /'
+    exit 1
 }
 
 # ufw_baseline MODE [PORT]: none | deny | earlier-deny | identical-deny | preexisting
@@ -133,6 +178,8 @@ ufw_baseline() {
     ufw default allow outgoing > /dev/null
     ufw allow 22/tcp comment ssh-access > /dev/null
     ufw allow 443/udp comment awg-fixture-udp > /dev/null
+    [[ $fixture_udp_port == 443 ]] ||
+        ufw allow "$fixture_udp_port/udp" comment awg-fixture-udp-alt > /dev/null
     ufw route allow in on awg0 out on eth0 comment awg-fixture-route > /dev/null
     case $mode in
         earlier-deny) ufw insert 1 deny proto tcp from "$peer_ip/32" to any port "$port" comment foreign-deny > /dev/null ;;
@@ -175,7 +222,7 @@ awg_view() {
 
 udp_monitor_start() {
     rm -f "$qa_dir/udp-result"
-    ip netns exec "$peer_ns" python3 /usr/local/lib/xvk-qa/udp-monitor.py "$guest_ip" 443 "$qa_dir/udp-result" &
+    ip netns exec "$peer_ns" python3 /usr/local/lib/xvk-qa/udp-monitor.py "$guest_ip" "$fixture_udp_port" "$qa_dir/udp-result" &
     monitor_pid=$!
     sleep 2
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 case "${1:-all}" in
-    all|legacy-core-command|coherent-upgrade-and-rollback|bad-bundle-and-stale-rollback) selected=${1:-all} ;;
+    all|legacy-core-command|coherent-upgrade-and-rollback|bad-bundle-and-stale-rollback|candidate-cleanup-guards) selected=${1:-all} ;;
     *) printf 'Unknown update case\n' >&2; exit 1 ;;
 esac
 # shellcheck source=tests/helpers/sandbox.sh
@@ -108,7 +108,7 @@ if [[ $selected == all || $selected == coherent-upgrade-and-rollback ]]; then
         bash "$moved_fixture/update.sh" --rollback --root "$root"
     assert_eq "$initial_bundle" "$(readlink "$root/opt/xray-vps-kit/current")" 'rollback restores previous bundle selection'
     assert_eq "$(readlink -f "$root/opt/xray-vps-kit/current/xray")" "$(readlink -f "$root/usr/local/bin/xray")" 'xray command follows rollback selection'
-    assert_eq '0.1.0' "$(jq -r '.installed.kitVersion' "$state")" 'rollback restores prior installed metadata'
+    assert_eq "$(cat "$PROJECT_DIR/VERSION")" "$(jq -r '.installed.kitVersion' "$state")" 'rollback restores prior installed metadata'
     assert_eq "$initial_identity" "$(state_identity_view "$state")" 'rollback restores matching client state'
     bash "$manager" show main-user | grep '^vless://' > "$scratch/rolled-back-uri"
     assert_success 'rollback preserves the exact client profile' cmp -s "$initial_uri" "$scratch/rolled-back-uri"
@@ -172,6 +172,7 @@ if [[ $selected == all || $selected == bad-bundle-and-stale-rollback ]]; then
             [[ $action != activate ]] || return 1
             xvk_service_hook "$@"
         }
+        # shellcheck disable=SC2030,SC2031
         export XVK_ROOT="$root" XVK_ARCHIVE="$archive" XVK_ARCH=amd64
         xvk_with_lock "$root/run/lock/xray-vps-kit.lock" \
             xvk_update_locked "$fixture" "$root" apply failing_activation_hook
@@ -212,4 +213,104 @@ if [[ $selected == all || $selected == coherent-upgrade-and-rollback ]]; then
     assert_eq 0 "$status" 'kit-only upgrade reuses the installed core without a download'
     assert_eq '0.2.0' "$(jq -r '.installed.kitVersion' "$root/etc/xray-vps-kit/state.json")" 'kit-only upgrade is recorded'
     assert_success 'reused core still runs' "$root/opt/xray-vps-kit/current/xray" version
+fi
+
+if [[ $selected == all || $selected == candidate-cleanup-guards ]]; then
+    # A failed rollback can leave current pointing at the uncommitted candidate.
+    # That bundle is then the only runnable core and must never be cleaned up.
+    root=$(mktemp -d "$scratch/cleanup.XXXXXXXX")
+    install_test_root "$root"
+    fixture="$scratch/cleanup-kit"
+    make_fixture_kit "$fixture"
+    current="$root/opt/xray-vps-kit/current"
+    before_bundle=$(readlink "$current")
+    status=0
+    (
+        for module in common state release render ownership transaction snapshot bundle service update-options update-lifecycle; do
+            # shellcheck source=/dev/null
+            source "$fixture/lib/$module.sh"
+        done
+        # shellcheck disable=SC2317,SC2329
+        failing_activation_hook() {
+            local action=$1 dir=${3%/}
+            if [[ $action == activate ]]; then
+                # Simulate damage discovered during failed activation: the rollback
+                # snapshot no longer verifies, so the selection stays on the
+                # uncommitted candidate instead of being restored.
+                find "$dir/etc/xray-vps-kit/backups" -name state.json -type f -exec sh -c 'printf tamper >> "$1"' _ {} \;
+                return 1
+            fi
+            xvk_service_hook "$@"
+        }
+        # shellcheck disable=SC2030,SC2031
+        export XVK_ROOT="$root" XVK_ARCHIVE="$archive" XVK_ARCH=amd64
+        xvk_with_lock "$root/run/lock/xray-vps-kit.lock" \
+            xvk_update_locked "$fixture" "$root" apply failing_activation_hook
+    ) > "$scratch/failed-rollback.log" 2>&1 || status=$?
+    assert_failure 'failed activation with failed rollback reports failure' test "$status" -eq 0
+    candidate=$(readlink "$current")
+    assert_success 'failed rollback leaves the candidate selected for recovery' \
+        test "$candidate" != "$before_bundle"
+    assert_success 'the selected candidate core still exists' \
+        test -x "$root/opt/xray-vps-kit/$candidate/xray"
+    assert_success 'the selected candidate bundle directory was retained' \
+        test -d "$root/opt/xray-vps-kit/$candidate"
+    assert_success 'cleanup reports that the candidate was not deleted' \
+        grep -qi retained "$scratch/failed-rollback.log"
+
+    # A normal failed activation with a working rollback must still delete the
+    # unselected candidate instead of leaking it.
+    root=$(mktemp -d "$scratch/cleanup-rollback.XXXXXXXX")
+    install_test_root "$root"
+    fixture="$scratch/cleanup-rollback-kit"
+    make_fixture_kit "$fixture"
+    current="$root/opt/xray-vps-kit/current"
+    before_bundle=$(readlink "$current")
+    status=0
+    (
+        for module in common state release render ownership transaction snapshot bundle service update-options update-lifecycle; do
+            # shellcheck source=/dev/null
+            source "$fixture/lib/$module.sh"
+        done
+        # shellcheck disable=SC2317,SC2329
+        failing_activation_hook() {
+            local action=$1
+            [[ $action != activate ]] || return 1
+            xvk_service_hook "$@"
+        }
+        # shellcheck disable=SC2030,SC2031
+        export XVK_ROOT="$root" XVK_ARCHIVE="$archive" XVK_ARCH=amd64
+        xvk_with_lock "$root/run/lock/xray-vps-kit.lock" \
+            xvk_update_locked "$fixture" "$root" apply failing_activation_hook
+    ) > "$scratch/normal-rollback.log" 2>&1 || status=$?
+    assert_failure 'failed activation with a working rollback reports failure' test "$status" -eq 0
+    assert_eq "$before_bundle" "$(readlink "$current")" 'working rollback restores the previous selection'
+    assert_eq 1 "$(find "$root/opt/xray-vps-kit/releases" -mindepth 1 -maxdepth 1 -type d | wc -l)" \
+        'working rollback deletes the unselected candidate bundle'
+
+    # Direct guards: ambiguous selection, wrong digest and unrelated selection.
+    # shellcheck source=lib/common.sh
+    source "$fixture/lib/common.sh"
+    # shellcheck source=lib/release.sh
+    source "$fixture/lib/release.sh"
+    # shellcheck source=lib/bundle.sh
+    source "$fixture/lib/bundle.sh"
+    retained="$root/opt/xray-vps-kit/$before_bundle"
+    held="$root/opt/xray-vps-kit/releases/extra-candidate"
+    cp -a "$retained" "$held"
+    held_digest=$(xvk_bundle_content_digest "$held")
+    ln -sfn 'releases/../etc' "$current"
+    assert_failure 'ambiguous selection retains the uncommitted bundle' \
+        xvk_bundle_remove_unselected "$root" "$held" "$held_digest"
+    assert_success 'ambiguous selection left the bundle on disk' test -d "$held"
+    ln -sfn "$before_bundle" "$current"
+    assert_failure 'a digest mismatch refuses to delete the bundle' \
+        xvk_bundle_remove_unselected "$root" "$held" "$(printf 'a%.0s' {1..64})"
+    assert_success 'digest mismatch left the bundle on disk' test -d "$held"
+    assert_failure 'the selected bundle is never deleted as a candidate' \
+        xvk_bundle_remove_unselected "$root" "$retained" "$(xvk_bundle_content_digest "$retained")"
+    assert_success 'the selected bundle survived candidate cleanup' test -d "$retained"
+    assert_success 'an unselected bundle with a matching digest is deleted' \
+        xvk_bundle_remove_unselected "$root" "$held" "$held_digest"
+    assert_failure 'deleted candidate bundle is gone' test -d "$held"
 fi

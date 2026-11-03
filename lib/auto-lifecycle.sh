@@ -48,6 +48,7 @@ xvk_auto_install_locked() (
     set -euo pipefail
     local project=$1 root=${2%/} mode=$3 payload data job stage='' backup='' temporary file
     local previous_mode='' previous_reason='' control_changed=false committed=false
+    local saved='' cron_present=false data_existed=false published=false recovery_failed=false status=0
     payload="$root/opt/xray-vps-kit-auto-update"
     data="$root/var/lib/xray-vps-kit-auto-update"
     job="$root/etc/cron.d/xray-vps-kit-auto-update"
@@ -55,13 +56,52 @@ xvk_auto_install_locked() (
     xvk_auto_verify "$root" || { xvk_error 'Foreign or changed automatic-update resources'; exit 1; }
     xvk_no_symlink_path "$payload" && xvk_no_symlink_path "$data" && xvk_no_symlink_path "$job" || exit 1
     stage=$(mktemp -d "$root/opt/.xray-auto-new.XXXXXXXX") || exit 1
-    # A failed refresh must restore the prior scheduling mode, not silently
-    # disable a previously enabled (or paused) worker.
+    trap 'rm -rf -- "$stage"' EXIT
+    # A failed refresh must restore the prior worker and scheduling mode, not just
+    # the control file: until the new worker is fully verified it is uncommitted.
     if [[ -f $data/control.json ]]; then
         previous_mode=$(jq -r .mode "$data/control.json") || exit 1
         previous_reason=$(jq -r .reason "$data/control.json") || exit 1
     fi
-    trap 'if [[ -n $stage ]]; then rm -rf -- "$stage"; fi; if [[ -n $backup ]]; then if [[ ! -e $payload ]]; then mv -T "$backup" "$payload" || xvk_error "Worker recovery retained at $backup"; else xvk_auto_payload_remove "$backup" || xvk_error "Previous worker retained at $backup"; fi; fi; if [[ $control_changed == true && $committed != true ]]; then if [[ -n $previous_mode ]]; then xvk_auto_control_write "$root" "$previous_mode" "$previous_reason" || xvk_error "Automatic-update control could not be restored to $previous_mode"; else rm -f -- "$data/control.json" || xvk_error "Could not remove the partial automatic-update control file"; fi; fi' EXIT
+    if [[ -d $data ]]; then data_existed=true; fi
+    saved=$(mktemp -d) || exit 1
+    if [[ -f $job ]]; then
+        cp -p "$job" "$saved/job" || exit 1
+        cron_present=true
+    fi
+    trap 'status=$?;
+        if [[ -n $stage ]]; then rm -rf -- "$stage"; fi
+        if [[ $committed != true ]]; then
+            if [[ $published == true ]]; then
+                if ! xvk_auto_payload_remove "$payload"; then
+                    xvk_error "Uncommitted worker retained at $payload; previous worker kept at ${backup:-none}"
+                    recovery_failed=true
+                elif [[ -n $backup ]]; then
+                    mv -T "$backup" "$payload" || { xvk_error "Previous worker retained at $backup"; recovery_failed=true; }
+                    backup=""
+                fi
+            elif [[ -n $backup && ! -e $payload ]]; then
+                mv -T "$backup" "$payload" || { xvk_error "Previous worker retained at $backup"; recovery_failed=true; }
+                backup=""
+            fi
+            if [[ $cron_present == true ]]; then
+                install -m 644 "$saved/job" "$job" || { xvk_error "Previous automatic-update schedule could not be restored"; recovery_failed=true; }
+            else
+                rm -f -- "$job" || { xvk_error "Partial automatic-update schedule could not be removed"; recovery_failed=true; }
+            fi
+            if [[ -n $previous_mode ]]; then
+                xvk_auto_control_write "$root" "$previous_mode" "$previous_reason" || { xvk_error "Automatic-update control could not be restored to $previous_mode"; recovery_failed=true; }
+            elif [[ $control_changed == true ]]; then
+                rm -f -- "$data/control.json" || { xvk_error "Could not remove the partial automatic-update control file"; recovery_failed=true; }
+                if [[ $data_existed == false ]]; then rmdir -- "$data" 2>/dev/null || true; fi
+            fi
+        elif [[ -n $backup ]]; then
+            xvk_auto_payload_remove "$backup" || xvk_error "Previous worker retained at $backup"
+            backup=""
+        fi
+        rm -rf -- "$saved"
+        [[ $recovery_failed != true ]] || printf "Recovery of the previous automatic-update worker is incomplete.\n" >&2
+        exit "$status"' EXIT
     mkdir "$stage/lib" || exit 1
     for file in "$project"/lib/*.sh "$project"/lib/*.jq; do
         xvk_regular_file "$file" && install -m 644 "$file" "$stage/lib/${file##*/}" || exit 1
@@ -83,6 +123,7 @@ xvk_auto_install_locked() (
         rmdir "$backup" && mv -T "$payload" "$backup" || exit 1
     fi
     mv -T "$stage" "$payload" || exit 1
+    published=true
     stage=''
     if [[ $mode == enabled ]]; then
         temporary=$(xvk_private_temp "${job%/*}") || exit 1

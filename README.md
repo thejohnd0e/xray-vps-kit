@@ -229,8 +229,12 @@ journalctl -u xray-vps-kit -n 30 --no-pager   # if it does not start
 xray-client doctor
 ```
 
-`doctor` checks the server side only. It ends with a fixed note about `--fp`, because a path
-problem between a client and the server is not visible from the server.
+`doctor` checks the server side only. It verifies the installed state, the ownership
+manifest against the installed files, that the selected core accepts the config, the service
+unit, and that the listening socket belongs to the service's own `MainPID` (another process
+on the same port is reported as a failure). It is not a live traffic probe and it ends with a
+fixed note about `--fp`, because a path problem between a client and the server is not visible
+from the server.
 
 ## Hiding the server from ping: `block-ping`
 

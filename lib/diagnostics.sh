@@ -63,7 +63,8 @@ xvk_client_doctor() {
     }
     # Every probe runs inside a condition so a failed mandatory check records a
     # diagnostic instead of aborting the report under errexit/pipefail.
-    if xvk_client_require_install "$root"; then check 'installed state and manifest' 0
+    if xvk_client_require_install "$root" && xvk_ownership_verify "$root" "$root" 2> /dev/null; then
+        check 'installed state and manifest' 0
     else check 'installed state and manifest' 1; fi
     if xvk_render_server "$cfg/state.json" 2>/dev/null | cmp -s - "$cfg/config.json"; then
         check 'configuration matches installed state' 0
@@ -76,13 +77,20 @@ xvk_client_doctor() {
     if [[ -f $root/etc/systemd/system/xray-vps-kit.service ]]; then
         check 'service unit is installed' 0
     else check 'service unit is installed' 1; fi
+    local pid='' listeners=''
+    if command -v systemctl > /dev/null 2>&1; then
+        pid=$(systemctl show --property=MainPID --value xray-vps-kit.service 2> /dev/null) || pid=''
+    fi
     if command -v systemctl > /dev/null 2>&1 && systemctl is-active --quiet xray-vps-kit.service; then
         check 'service unit is active' 0
     else check 'service unit is active' 1; fi
     port=$(jq -r .port "$cfg/state.json" 2>/dev/null || printf '')
-    if [[ $port =~ ^[0-9]+$ ]] && [[ -n $(ss -H -ltn "sport = :$port" 2>/dev/null) ]]; then
-        check 'listening socket on selected port' 0
-    else check 'listening socket on selected port' 1; fi
+    listeners=$(ss -H -ltnp "sport = :$port" 2> /dev/null) || listeners=''
+    # The socket must belong to this service's MainPID: any other listener on the
+    # port would otherwise make a broken unit look healthy.
+    if [[ $port =~ ^[0-9]+$ && $pid =~ ^[1-9][0-9]*$ && $listeners == *"pid=$pid,"* ]]; then
+        check 'listening socket belongs to the service' 0
+    else check 'listening socket belongs to the service' 1; fi
     printf 'xray-vps-kit doctor\n'
     cat "$report"
     printf 'Checks failed: %s\n' "$issues"

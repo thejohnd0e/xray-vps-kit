@@ -68,6 +68,30 @@ if [[ $selected == all || $selected == curl-pipe-bootstrap ]]; then
     }
     assert_failure 'damaged scheduled worker refuses source bootstrap' damaged_scheduled_worker
     assert_failure 'scheduled worker never downloads kit scripts to repair itself' test -e "$scratch/must-not-clone"
+    # The same worker invoked from its own directory (relative path) must be
+    # recognised as installed rather than treated as a fresh source bootstrap.
+    damaged_relative_worker() {
+        ( cd "$damaged" && XVK_SRC="$scratch/must-not-clone" XVK_REPO="file://$repo" \
+            bash auto-update.sh status --root "$scratch" )
+    }
+    assert_failure 'relative invocation of a damaged worker refuses bootstrap' damaged_relative_worker
+    assert_failure 'relative damaged worker never clones the kit' test -e "$scratch/must-not-clone"
+    ln -s "$damaged/auto-update.sh" "$scratch/damaged-worker-link"
+    damaged_linked_worker() {
+        XVK_SRC="$scratch/must-not-clone" XVK_REPO="file://$repo" \
+            bash "$scratch/damaged-worker-link" status --root "$scratch"
+    }
+    assert_failure 'a damaged worker reached through a symlink refuses bootstrap' damaged_linked_worker
+    assert_failure 'symlinked damaged worker never clones the kit' test -e "$scratch/must-not-clone"
+    spaced="$scratch/damaged with space/opt/xray-vps-kit-auto-update"
+    mkdir -p "$spaced"
+    cp "$PROJECT_DIR/auto-update.sh" "$spaced/auto-update.sh"
+    spaced_worker() {
+        ( cd "$spaced" && XVK_SRC="$scratch/must-not-clone" XVK_REPO="file://$repo" \
+            bash auto-update.sh status --root "$scratch" )
+    }
+    assert_failure 'a damaged worker in a path with spaces refuses bootstrap' spaced_worker
+    assert_failure 'spaced damaged worker never clones the kit' test -e "$scratch/must-not-clone"
     bootstrap_bin="$scratch/bootstrap-bin"
     mkdir "$bootstrap_bin"
     for tool in bash dirname cat uname; do ln -s "$(command -v "$tool")" "$bootstrap_bin/$tool"; done

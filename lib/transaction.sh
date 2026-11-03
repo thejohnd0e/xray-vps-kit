@@ -5,8 +5,9 @@
 
 xvk_with_lock() (
     set -euo pipefail
-    local lock=$1 lock_fd
+    local lock=$1 lock_fd timeout=${XVK_LOCK_TIMEOUT:-10}
     shift
+    [[ $timeout =~ ^[0-9]+$ ]] || timeout=10
     xvk_no_symlink_path "$lock" && [[ -d ${lock%/*} ]] || exit 1
     if [[ ! -e $lock ]]; then
         # noclobber creates only a new regular file; a racing creator is then
@@ -15,7 +16,7 @@ xvk_with_lock() (
     fi
     xvk_private_file "$lock" || { xvk_error 'Unsafe mutation lock'; exit 1; }
     exec {lock_fd}<"$lock" || exit 1
-    flock --exclusive --timeout 10 "$lock_fd" || { xvk_error 'Mutation lock timeout'; exit 1; }
+    flock --exclusive --timeout "$timeout" "$lock_fd" || { xvk_error 'Mutation lock timeout'; exit 1; }
     "$@"
 )
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 case "${1:-all}" in
-    all|uri-text-qr-equivalence|unsafe-output-and-redaction) selected=${1:-all} ;;
+    all|uri-text-qr-equivalence|unsafe-output-and-redaction|doctor-integrity-and-pid) selected=${1:-all} ;;
     *) printf 'Unknown export-doctor case\n' >&2; exit 1 ;;
 esac
 [[ -f $PROJECT_DIR/lib/diagnostics.sh ]] || { printf 'FAIL: export/doctor module not implemented\n' >&2; exit 1; }
@@ -14,7 +14,7 @@ root=$(mktemp -d "$scratch/root.XXXXXXXX")
 xvk_test_install "$root" "$archive" > /dev/null
 manager="$root/usr/local/bin/xray-client"
 state="$root/etc/xray-vps-kit/state.json"
-if [[ $selected != unsafe-output-and-redaction ]]; then
+if [[ $selected != unsafe-output-and-redaction && $selected != doctor-integrity-and-pid ]]; then
     command -v zbarimg > /dev/null || { printf 'Missing test-only QR decoder: zbarimg\n' >&2; exit 1; }
     real_qrencode=$(command -v qrencode)
     mkdir "$scratch/qr-bin"
@@ -46,7 +46,7 @@ QR
     printf '%s' "$(cat "$scratch/uri")" > "$scratch/without-lf"
     assert_success 'QR payload has no added newline' cmp -s "$scratch/without-lf" "$scratch/qr-input"
 fi
-if [[ $selected != uri-text-qr-equivalence ]]; then
+if [[ $selected != uri-text-qr-equivalence && $selected != doctor-integrity-and-pid ]]; then
     printf 'foreign data\n' > "$scratch/foreign"
     assert_failure 'existing export file is never overwritten' bash "$manager" export main-user --output "$scratch/foreign"
     assert_eq 'foreign data' "$(cat "$scratch/foreign")" 'existing contents preserved'
@@ -60,6 +60,78 @@ if [[ $selected != uri-text-qr-equivalence ]]; then
     for secret in "$(jq -r .privateKey "$state")" "$(jq -r '.clients[0].uuid' "$state")"; do
         assert_failure 'doctor output contains no credential sentinel' grep -Fq "$secret" "$scratch/doctor"
     done
+    cp -p "$root/etc/xray-vps-kit/config.json" "$scratch/doctor-valid-config"
     printf 'broken config\n' > "$root/etc/xray-vps-kit/config.json"
     assert_failure 'invalid config makes doctor fail' bash "$manager" doctor
+    cp -p "$scratch/doctor-valid-config" "$root/etc/xray-vps-kit/config.json"
+fi
+
+if [[ $selected == all || $selected == doctor-integrity-and-pid ]]; then
+    port=$(jq -r .port "$state")
+    bindir="$scratch/doctor-bin"
+    mkdir "$bindir"
+    cat > "$bindir/systemctl" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+case "$*" in
+    'is-active --quiet xray-vps-kit.service') [[ ${XVK_DOCTOR_ACTIVE:-0} == 1 ]] ;;
+    'show --property=MainPID --value xray-vps-kit.service') printf '%s\n' "${XVK_DOCTOR_PID:-0}" ;;
+    *) exit 1 ;;
+esac
+STUB
+    cat > "$bindir/ss" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ ${XVK_DOCTOR_SS_FAIL:-0} != 1 ]] || exit 1
+[[ -n ${XVK_DOCTOR_SS_OUTPUT:-} ]] || exit 0
+printf '%s\n' "$XVK_DOCTOR_SS_OUTPUT"
+STUB
+    chmod 755 "$bindir/systemctl" "$bindir/ss"
+    listener="LISTEN 0 128 0.0.0.0:$port 0.0.0.0:* users:((\"xray\",pid=4242,fd=3))"
+    doctor_run() {
+        local log=$1 status=0
+        shift
+        env "$@" PATH="$bindir:$PATH" bash "$manager" doctor > "$log" 2>&1 || status=$?
+        printf '%s\n' "$status"
+    }
+    assert_eq 0 "$(doctor_run "$scratch/doctor-healthy" XVK_DOCTOR_ACTIVE=1 XVK_DOCTOR_PID=4242 \
+        XVK_DOCTOR_SS_OUTPUT="$listener")" 'healthy service with its own listener passes'
+    assert_success 'doctor reports the owned listener' grep -q 'listening socket belongs to the service' "$scratch/doctor-healthy"
+
+    unrelated="LISTEN 0 128 0.0.0.0:$port 0.0.0.0:* users:((\"other\",pid=9999,fd=3))"
+    assert_failure 'an unrelated listener is not accepted as healthy' \
+        test "$(doctor_run "$scratch/doctor-unrelated" XVK_DOCTOR_ACTIVE=1 XVK_DOCTOR_PID=4242 \
+            XVK_DOCTOR_SS_OUTPUT="$unrelated")" -eq 0
+    assert_success 'the unrelated listener is reported as a failure' \
+        grep -q '\[FAIL\] listening socket belongs to the service' "$scratch/doctor-unrelated"
+
+    assert_failure 'a missing MainPID is not accepted as healthy' \
+        test "$(doctor_run "$scratch/doctor-nopid" XVK_DOCTOR_ACTIVE=1 XVK_DOCTOR_PID=0 \
+            XVK_DOCTOR_SS_OUTPUT="$listener")" -eq 0
+    assert_failure 'a failing listener probe is not accepted as healthy' \
+        test "$(doctor_run "$scratch/doctor-ssfail" XVK_DOCTOR_ACTIVE=1 XVK_DOCTOR_PID=4242 XVK_DOCTOR_SS_FAIL=1)" -eq 0
+
+    # Integrity drift: a changed owned launcher and a malformed manifest must both
+    # fail the report even though state.json and config.json remain valid.
+    cp -p "$manager" "$scratch/launcher-backup"
+    printf '# drift\n' >> "$manager"
+    assert_failure 'a changed owned launcher fails doctor' \
+        test "$(doctor_run "$scratch/doctor-drift" XVK_DOCTOR_ACTIVE=1 XVK_DOCTOR_PID=4242 \
+            XVK_DOCTOR_SS_OUTPUT="$listener")" -eq 0
+    assert_success 'drift is reported as a manifest failure' \
+        grep -q '\[FAIL\] installed state and manifest' "$scratch/doctor-drift"
+    cp -p "$scratch/launcher-backup" "$manager"
+
+    manifest="$root/etc/xray-vps-kit/ownership.json"
+    cp -p "$manifest" "$scratch/manifest-backup"
+    printf 'not json\n' > "$manifest"
+    assert_failure 'a malformed ownership manifest fails doctor' \
+        test "$(doctor_run "$scratch/doctor-manifest" XVK_DOCTOR_ACTIVE=1 XVK_DOCTOR_PID=4242 \
+            XVK_DOCTOR_SS_OUTPUT="$listener")" -eq 0
+    for secret in "$(jq -r .privateKey "$state")" "$(jq -r '.clients[0].uuid' "$state")"; do
+        assert_failure 'integrity failures leak no credential sentinel' grep -Fq "$secret" "$scratch/doctor-manifest"
+    done
+    cp -p "$scratch/manifest-backup" "$manifest"
+    assert_eq 0 "$(doctor_run "$scratch/doctor-restored" XVK_DOCTOR_ACTIVE=1 XVK_DOCTOR_PID=4242 \
+        XVK_DOCTOR_SS_OUTPUT="$listener")" 'restoring the manifest makes doctor pass again'
 fi

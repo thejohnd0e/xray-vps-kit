@@ -70,7 +70,7 @@ xvk_core_apply_locked() (
     digest=$(xvk_bundle_content_digest "$candidate") || exit 1
     bundle="$kit-$version-$digest"
     directory="$root/opt/xray-vps-kit/releases/$bundle"
-    trap 'if [[ -n $stage ]]; then rm -rf -- "$stage"; fi; if [[ -n $release_stage ]]; then rm -rf -- "$release_stage"; fi; if [[ $written == true && $committed != true ]]; then xvk_bundle_remove "$directory" "$digest" || xvk_error "Uncommitted core bundle retained: $directory"; fi' EXIT
+    trap 'if [[ -n $stage ]]; then rm -rf -- "$stage"; fi; if [[ -n $release_stage ]]; then rm -rf -- "$release_stage"; fi; if [[ $written == true && $committed != true ]]; then xvk_bundle_remove_unselected "$root" "$directory" "$digest" || xvk_error "Uncommitted core bundle was not deleted"; fi' EXIT
     xvk_no_symlink_path "$directory" || exit 1
     if [[ -e $directory || -L $directory ]]; then
         [[ -d $directory && ! -L $directory && $(xvk_bundle_content_digest "$directory") == "$digest" ]] || exit 1

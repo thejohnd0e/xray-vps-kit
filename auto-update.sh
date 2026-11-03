@@ -1,12 +1,36 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # An installed/scheduled worker must never repair itself by fetching kit code or
-# installing packages after removal or damage. Only the explicit source bootstrap
-# below is allowed to clone the kit.
-if [[ ${1:-} == scheduled || ${BASH_SOURCE[0]:-} == */opt/xray-vps-kit-auto-update/auto-update.sh ]]; then
-    if [[ ! -f ${BASH_SOURCE[0]:-} || ! -f $(dirname -- "${BASH_SOURCE[0]:-/}")/lib/common.sh ]]; then
+# installing packages after removal or damage. Relative invocation from its own
+# directory, and invocation through a symlink, must be recognised as well, so the
+# script path is resolved before deciding whether this is the installed worker.
+script_path=${BASH_SOURCE[0]:-}
+resolved_path=''
+if [[ -n $script_path && -f $script_path ]]; then
+    resolved_target=$script_path
+    hops=0
+    while [[ -L $resolved_target && $hops -lt 40 ]]; do
+        hops=$((hops + 1))
+        link_target=$(readlink -- "$resolved_target" 2> /dev/null) || { resolved_target=''; break; }
+        case $link_target in
+            /*) resolved_target=$link_target ;;
+            *) resolved_target=$(dirname -- "$resolved_target")/$link_target ;;
+        esac
+    done
+    if [[ -n $resolved_target && -f $resolved_target ]]; then
+        resolved_dir=$(cd -- "$(dirname -- "$resolved_target")" && pwd -P) || resolved_dir=''
+        [[ -z $resolved_dir ]] || resolved_path="$resolved_dir/${resolved_target##*/}"
+    fi
+fi
+if [[ ${1:-} == scheduled || $resolved_path == */opt/xray-vps-kit-auto-update/auto-update.sh ]]; then
+    if [[ ! -f $resolved_path || ! -f ${resolved_path%/*}/lib/common.sh ]]; then
         printf 'error: installed automatic-update worker is incomplete; refusing bootstrap\n' >&2; exit 1
     fi
+fi
+# Invoked through a symlink: continue from the real path so the shared bootstrap
+# check and module resolution see the directory the worker actually lives in.
+if [[ -n $resolved_path && -L $script_path && $resolved_path != "$script_path" ]]; then
+    exec bash "$resolved_path" "$@"
 fi
 # Started through `curl ... | bash` (no kit checkout beside this script): fetch the kit into
 # /opt/xray-vps-kit-src (or fast-forward the clone there) and continue from that copy.
