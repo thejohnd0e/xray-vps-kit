@@ -91,8 +91,10 @@ bash /opt/xray-vps-kit-auto-update/auto-update.sh enable
 
 `run` explicitly checks/updates now, even while scheduling is disabled. `disable` removes
 the owned cron entry but retains the worker and last result. Repeat the download/enable
-one-liner to refresh the worker from this repository. The daily job itself neither fetches
-kit scripts nor upgrades the kit.
+one-liner to refresh the worker from this repository. If that refresh fails, the previously
+installed worker and its scheduling mode are restored; when the new payload cannot be
+removed, the old worker is kept and the failure is reported. The daily job itself neither
+fetches kit scripts nor upgrades the kit.
 
 Last-run reports are overwritten, not appended indefinitely:
 `/var/lib/xray-vps-kit-auto-update/last-run.log` and `last-run.json` (root-only, no client
@@ -204,7 +206,9 @@ xray-client version                      # kit and Xray-core versions
 - Names: letters, digits, `_`, `-`, `@` and `.` (e.g. an email). One identity = one device is recommended.
 - `add` and `remove` change the config atomically and **restart the service**, so every
   connected client drops for a moment and reconnects. On failure the previous config is
-  restored. Removing a client disconnects that device for good.
+  restored. Concurrent `add`/`remove` commands wait for the kit lock (up to 60 seconds) and
+  then apply in turn instead of failing on state changed by another command. Removing a
+  client disconnects that device for good.
 - Import the URI (or scan the QR code) in a VLESS + REALITY client. See
   "Client compatibility" for what has and has not been tested.
 - `--fp` sets the TLS fingerprint written into the URI: `chrome` (default), `firefox`, `safari`,
@@ -230,11 +234,12 @@ xray-client doctor
 ```
 
 `doctor` checks the server side only. It verifies the installed state, the ownership
-manifest against the installed files, that the selected core accepts the config, the service
-unit, and that the listening socket belongs to the service's own `MainPID` (another process
-on the same port is reported as a failure). It is not a live traffic probe and it ends with a
-fixed note about `--fp`, because a path problem between a client and the server is not visible
-from the server.
+manifest against the installed files, that the rendered config matches the installed state,
+that the selected core accepts that config, that the service unit is installed and active,
+and that the listening socket belongs to the service's own `MainPID` (another process on the
+same port is reported as a failure). It is not a live traffic probe and it ends with a fixed
+note about `--fp`, because a path problem between a client and the server is not visible from
+the server.
 
 ## Hiding the server from ping: `block-ping`
 
