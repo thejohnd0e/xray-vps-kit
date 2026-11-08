@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.1
 
 - Service unit: restarts after any exit without a start limit; extra systemd sandboxing.
 - `block-ping`: the uplink is detected again at every start and reload, `systemctl reload nftables`
@@ -17,8 +17,6 @@
   advisory Debian CI job; `SECURITY.md`; Russian README.
 
 - `xray-client export --format singbox|clash`, `list --json`, `doctor` advisories and `--probe-target`.
-
-## 0.1.1
 
 - Failed worker refresh restores the exact previous payload, candidate bundles are not deleted
   while selected, `doctor` verifies ownership and listener ownership, client mutations are
