@@ -263,7 +263,7 @@ if [[ $selected == all || $selected == injected-failures ]]; then
     prepare_upgrade "$root" "$stage"
     assert_failure 'a killed change does not report success' xvk_with_lock "$root/run/lock/xray-vps-kit.lock" xvk_transaction_apply "$root" "$stage" crash_hook
     assert_success 'a killed change leaves its journal behind' test -f "$root/etc/xray-vps-kit/transaction.journal"
-    assert_failure 'the half-applied files no longer verify' xvk_ownership_verify "$root" "$root"
+    assert_failure 'the killed change had already replaced the files' test "$before" = "$(xvk_ownership_manifest "$root" "$root")"
     assert_eq 0 "$(xvk_with_lock "$root/run/lock/xray-vps-kit.lock" xvk_transaction_recover "$scratch/none" transaction_hook > /dev/null 2>&1; echo $?)" 'recovery with no installation pending is a no-op'
     status=0
     xvk_with_lock "$root/run/lock/xray-vps-kit.lock" xvk_transaction_recover "$root" transaction_hook || status=$?
@@ -276,6 +276,7 @@ if [[ $selected == all || $selected == injected-failures ]]; then
     xvk_with_lock "$root/run/lock/xray-vps-kit.lock" xvk_transaction_recover "$root" transaction_hook || status=$?
     assert_eq 0 "$status" 'a second recovery finds nothing to do'
     # A later change finds the leftovers of a crash and undoes them first.
+    rm -rf -- "$root"/opt/xray-vps-kit/releases/0.2.0-*
     stage=$(mktemp -d "$root/etc/xray-vps-kit/.stage.XXXXXXXX")
     prepare_stage "$root" "$stage" crashed-again
     prepare_upgrade "$root" "$stage"

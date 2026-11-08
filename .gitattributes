@@ -8,3 +8,6 @@
 *.jq text eol=lf
 *.template text eol=lf
 /block-ping text eol=lf
+*.in text eol=lf
+*.yml text eol=lf
+*.md text eol=lf
