@@ -9,10 +9,21 @@ xvk_auto_present() {
     return 1
 }
 
+# Minute of an existing owned job, empty when there is none. The minute is chosen once,
+# at random, when the job is created (so servers do not all contact GitHub at the same
+# moment) and is then kept; verification compares the file with text rendered for it.
+xvk_auto_cron_minute() {
+    local line
+    [[ -f ${1:-} && ! -L $1 ]] || return 0
+    line=$(grep -E -m 1 '^([0-9]|[1-5][0-9]) 3 \* \* \* root ' "$1") || return 0
+    printf '%s\n' "${line%% *}"
+}
+
 xvk_auto_cron_text() {
-    local root=${1%/}
+    local root=${1%/} minute=${2:-30}
+    [[ $minute =~ ^([0-9]|[1-5][0-9])$ ]] || return 1
     printf '# xray-vps-kit: optional official stable core updates\nSHELL=/bin/sh\nPATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\n'
-    printf '30 3 * * * root /bin/bash %s/opt/xray-vps-kit-auto-update/auto-update.sh scheduled >/dev/null\n' "$root"
+    printf '%s 3 * * * root /bin/bash %s/opt/xray-vps-kit-auto-update/auto-update.sh scheduled >/dev/null\n' "$minute" "$root"
 }
 
 xvk_auto_payload_manifest() (
@@ -45,7 +56,7 @@ xvk_auto_control_valid() {
 
 xvk_auto_verify() (
     set -euo pipefail
-    local root=${1%/} payload data job actual path name
+    local root=${1%/} payload data job actual path name minute
     xvk_auto_present "$root" || exit 0
     payload="$root/opt/xray-vps-kit-auto-update"
     data="$root/var/lib/xray-vps-kit-auto-update"
@@ -73,7 +84,8 @@ xvk_auto_verify() (
     done < <(find "$data" -mindepth 1 -maxdepth 1 -print0)
     if [[ -e $job || -L $job ]]; then
         xvk_regular_file "$job" && [[ $(stat -c %u "$job") == "$EUID" && $(stat -c %a "$job") == 644 && $(stat -c %h "$job") == 1 ]] || exit 1
-        xvk_auto_cron_text "$root" | cmp -s - "$job" || exit 1
+        minute=$(xvk_auto_cron_minute "$job")
+        xvk_auto_cron_text "$root" "${minute:-30}" | cmp -s - "$job" || exit 1
     fi
 )
 

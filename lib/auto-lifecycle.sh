@@ -3,7 +3,7 @@
 xvk_auto_help() {
     cat <<'HELP'
 Usage: bash auto-update.sh enable|disable|status|run [OPTIONS]
-  enable       Install/refresh the optional worker; schedule daily at 03:30 local time
+  enable       Install/refresh the optional worker; schedule daily at 03:MM local time (MM chosen once per server)
   disable      Disable scheduled updates; retain worker and last result
   status       Show scheduling mode and the last check/update result
   run          Check and update the official stable core immediately
@@ -48,7 +48,7 @@ xvk_auto_install_locked() (
     set -euo pipefail
     local project=$1 root=${2%/} mode=$3 payload data job stage='' backup='' temporary file
     local previous_mode='' previous_reason='' control_changed=false committed=false
-    local saved='' cron_present=false data_existed=false published=false recovery_failed=false status=0
+    local minute saved='' cron_present=false data_existed=false published=false recovery_failed=false status=0
     payload="$root/opt/xray-vps-kit-auto-update"
     data="$root/var/lib/xray-vps-kit-auto-update"
     job="$root/etc/cron.d/xray-vps-kit-auto-update"
@@ -127,7 +127,8 @@ xvk_auto_install_locked() (
     stage=''
     if [[ $mode == enabled ]]; then
         temporary=$(xvk_private_temp "${job%/*}") || exit 1
-        xvk_auto_cron_text "$root" > "$temporary" || { rm -f "$temporary"; exit 1; }
+        minute=$(xvk_auto_cron_minute "$job")
+        xvk_auto_cron_text "$root" "${minute:-$((RANDOM % 60))}" > "$temporary" || { rm -f "$temporary"; exit 1; }
         if ! chmod 644 "$temporary" || ! mv -fT "$temporary" "$job"; then rm -f "$temporary"; exit 1; fi
         if [[ $XVK_SANDBOX != true ]]; then
             systemctl enable --now cron && systemctl is-active --quiet cron || exit 1
@@ -153,7 +154,8 @@ xvk_auto_enable() {
         xvk_require_commands cron || return 1
     fi
     xvk_with_lock "$root/run/lock/xray-vps-kit.lock" xvk_auto_install_locked "$project" "$root" enabled || return 1
-    printf 'Automatic stable Xray-core updates enabled: daily at 03:30 server local time. No immediate update.\n'
+    printf 'Automatic stable Xray-core updates enabled: daily at 03:%02d server local time. No immediate update.\n' \
+        "$((10#$(xvk_auto_cron_minute "$root/etc/cron.d/xray-vps-kit-auto-update")))"
 }
 
 xvk_auto_disable_locked() {

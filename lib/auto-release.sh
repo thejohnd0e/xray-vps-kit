@@ -8,6 +8,18 @@ xvk_auto_fetch_release() {
         --output "$1" https://api.github.com/repos/XTLS/Xray-core/releases/latest
 }
 
+# A scheduled run waits until the release is a few days old, so a regression found
+# right after publication does not reach every server at once. An explicit `run`
+# skips this wait. Unknown or unparsable publication time counts as too young.
+xvk_auto_release_aged() {
+    local metadata=$1 days=${XVK_AUTO_MIN_AGE_DAYS:-3} published stamp now
+    [[ $days =~ ^[0-9]{1,3}$ ]] || return 1
+    published=$(jq -er '.published_at | select(type=="string")' "$metadata") || return 1
+    stamp=$(date -u -d "$published" +%s 2> /dev/null) || return 1
+    now=${XVK_AUTO_NOW:-$(date -u +%s)}
+    (( now - stamp >= 10#$days * 86400 ))
+}
+
 # API fields never become executable text or arbitrary download URLs. The resolved
 # lock has the same strict shape as a reviewed pin, but upstream metadata is the
 # explicit trust source for this opt-in feature.

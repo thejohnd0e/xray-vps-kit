@@ -50,6 +50,10 @@ xvk_auto_run_once() (
         xvk_auto_report "$root" skipped "$installed" "$latest" || exit 1
         exit 0
     fi
+    if [[ $scheduled == true ]] && ! xvk_auto_release_aged "$temporary/release.json"; then
+        xvk_auto_report "$root" skipped "$installed" "$latest" || exit 1
+        exit 0
+    fi
     mkdir "$temporary/cache" "$temporary/candidate" || fail_check 'Cannot create private update stage'
     if ! archive=$(xvk_release_acquire "$temporary/lock.json" "$XVK_ARCH" "$temporary/cache" 134217728); then fail_check 'Official core acquisition/checksum failed; running core unchanged'; fi
     if ! prepared_base=$(xvk_core_candidate "$root" "$temporary/lock.json" "$archive" "$temporary/candidate"); then

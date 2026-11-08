@@ -27,7 +27,7 @@ make_release() {
     local version=$1 sha
     python3 "$TESTS_DIR/helpers/fake-auto-core.py" "$future" "$version"
     sha=$(sha256sum "$future" | cut -d ' ' -f 1)
-    jq -n --arg tag "v$version" --arg sha "$sha" '{tag_name:$tag,draft:false,prerelease:false,assets:[
+    jq -n --arg tag "v$version" --arg sha "$sha" '{tag_name:$tag,published_at:"2026-01-01T00:00:00Z",draft:false,prerelease:false,assets:[
         {name:"Xray-linux-64.zip",browser_download_url:("https://github.com/XTLS/Xray-core/releases/download/"+$tag+"/Xray-linux-64.zip"),digest:("sha256:"+$sha)},
         {name:"Xray-linux-arm64-v8a.zip",browser_download_url:("https://github.com/XTLS/Xray-core/releases/download/"+$tag+"/Xray-linux-arm64-v8a.zip"),digest:("sha256:"+$sha)}]}' > "$metadata"
 }
@@ -91,6 +91,15 @@ mv "$scratch/bad-digest.json" "$metadata"
 before=$(sha256sum "$root/etc/xray-vps-kit/state.json")
 assert_failure 'advertised digest mismatch rejects the downloaded archive' xvk_auto_run "$PROJECT_DIR" "$root" run
 assert_eq "$before" "$(sha256sum "$root/etc/xray-vps-kit/state.json")" 'digest mismatch preserves the exact running state'
+make_release 26.12.9
+jq '.published_at="2026-06-01T00:00:00Z"' "$metadata" > "$scratch/young.json" && mv "$scratch/young.json" "$metadata"
+before=$(sha256sum "$root/etc/xray-vps-kit/state.json")
+fetches=$(wc -l < "$fetch_trace")
+young_now=$(date -u -d 2026-06-02T00:00:00Z +%s)
+XVK_AUTO_NOW=$young_now xvk_auto_run "$PROJECT_DIR" "$root" scheduled
+assert_eq "$((fetches + 1))" "$(wc -l < "$fetch_trace")" 'scheduled run still checks the release metadata'
+assert_eq "$before" "$(sha256sum "$root/etc/xray-vps-kit/state.json")" 'scheduled run leaves a release younger than three days alone'
+assert_eq skipped "$(jq -r .outcome "$root/var/lib/xray-vps-kit-auto-update/last-run.json")" 'a young release is recorded as skipped'
 make_release 27.1.1
 remove_during_fetch() { bash "$PROJECT_DIR/uninstall.sh" --yes --root "$root" > /dev/null; }
 after_fetch=remove_during_fetch

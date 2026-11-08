@@ -80,6 +80,15 @@ xvk_ufw_effective_allow() {
     [[ $status == *'Default: allow (incoming)'* ]]
 }
 
+# Insert at the top so an earlier rule cannot shadow it. UFW refuses position 1 when it has
+# no rules yet; then a plain append is the same thing, and the effectiveness check that
+# follows still proves the rule works.
+xvk_ufw_add_allow() {
+    local port=$1 marker=$2
+    LC_ALL=C ufw insert 1 allow in proto tcp from 0.0.0.0/0 to any port "$port" comment "$marker" > /dev/null 2>&1 ||
+        LC_ALL=C ufw allow in proto tcp from 0.0.0.0/0 to any port "$port" comment "$marker" > /dev/null
+}
+
 xvk_firewall_open() {
     local port=$1 marker record
     if [[ ${XVK_FIREWALL:-none} == none ]] || xvk_ufw_effective_allow "$port"; then
@@ -87,8 +96,7 @@ xvk_firewall_open() {
     fi
     marker="xray-vps-kit-$(openssl rand -hex 8)" || return 1
     record=$(jq -cn --arg marker "$marker" --argjson port "$port" '{backend:"ufw",marker:$marker,port:$port}') || return 1
-    if ! LC_ALL=C ufw insert 1 allow in proto tcp from 0.0.0.0/0 to any port "$port" comment "$marker" > /dev/null ||
-        ! xvk_ufw_effective_allow "$port"; then
+    if ! xvk_ufw_add_allow "$port" "$marker" || ! xvk_ufw_effective_allow "$port"; then
         xvk_firewall_remove "$record" || xvk_error 'Failed firewall insertion rollback needs operator recovery'
         xvk_error "UFW rule insertion/effectiveness failed; an identical or earlier foreign rule may shadow TCP $port"; return 1
     fi

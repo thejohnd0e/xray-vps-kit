@@ -108,6 +108,22 @@ if [[ $selected == all || $selected == metadata ]]; then
     assert_failure 'multiple API documents are rejected' xvk_auto_release_lock "$scratch/multiple.json" "$scratch/rejected-lock.json"
 fi
 
+# The inner scripts expand their own positional parameters.
+# shellcheck disable=SC2016
+if [[ $selected == all || $selected == metadata ]]; then
+    now=$(date -u -d 2026-06-10T00:00:00Z +%s)
+    printf '{"published_at":"2026-06-01T00:00:00Z"}
+' > "$scratch/aged.json"
+    assert_success 'a release nine days old passes the three-day wait' env XVK_AUTO_NOW="$now" bash -c 'source "$1"; xvk_auto_release_aged "$2"' _ "$PROJECT_DIR/lib/auto-release.sh" "$scratch/aged.json"
+    assert_failure 'a release nine days old fails a ten-day wait' env XVK_AUTO_NOW="$now" XVK_AUTO_MIN_AGE_DAYS=10 bash -c 'source "$1"; xvk_auto_release_aged "$2"' _ "$PROJECT_DIR/lib/auto-release.sh" "$scratch/aged.json"
+    printf '{"tag_name":"v1.2.3"}
+' > "$scratch/undated.json"
+    assert_failure 'a release without a publication time counts as too young' env XVK_AUTO_NOW="$now" bash -c 'source "$1"; xvk_auto_release_aged "$2"' _ "$PROJECT_DIR/lib/auto-release.sh" "$scratch/undated.json"
+    printf '{"published_at":"not a date"}
+' > "$scratch/baddate.json"
+    assert_failure 'an unparsable publication time counts as too young' env XVK_AUTO_NOW="$now" bash -c 'source "$1"; xvk_auto_release_aged "$2"' _ "$PROJECT_DIR/lib/auto-release.sh" "$scratch/baddate.json"
+fi
+
 if [[ $selected == all || $selected == scheduler ]]; then
     assert_success 'optional updater help works without configuring cron' bash "$PROJECT_DIR/auto-update.sh" --help
     # shellcheck source=tests/helpers/sandbox.sh
@@ -127,7 +143,7 @@ exit 97
 STUB
     chmod +x "$scratch/probe-bin/apt-get"
     assert_success 'explicit enable installs an owned daily job in the sandbox' bash "$PROJECT_DIR/auto-update.sh" enable --root "$root"
-    assert_success 'daily job uses the approved 03:30 server-local schedule' grep -q '^30 3 \* \* \* root ' "$root/etc/cron.d/xray-vps-kit-auto-update"
+    assert_success 'daily job runs at 03:MM server-local time with a per-server minute' grep -qE '^([0-9]|[1-5][0-9]) 3 \* \* \* root ' "$root/etc/cron.d/xray-vps-kit-auto-update"
     assert_success 'worker is self-contained outside versioned core bundles' test -f "$root/opt/xray-vps-kit-auto-update/lib/core-update.sh"
     cp "$root/etc/cron.d/xray-vps-kit-auto-update" "$scratch/cron-original"
     assert_success 'repeated enable is idempotent' bash "$PROJECT_DIR/auto-update.sh" enable --root "$root"

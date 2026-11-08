@@ -147,6 +147,25 @@ if [[ $selected == all || $selected == preflight-and-start-failure || $selected 
         unset -f ufw
     }
     {
+        # UFW without any rules refuses position 1; the rule is then appended instead.
+        fixture_ufw_calls="$scratch/ufw-calls"
+        : > "$fixture_ufw_calls"
+        # Invoked indirectly by the sourced firewall adapter.
+        # shellcheck disable=SC2317,SC2329
+        ufw() {
+            printf '%s\n' "$1" >> "$fixture_ufw_calls"
+            [[ $1 != insert || ${ufw_insert_works:-false} == true ]]
+        }
+        ufw_insert_works=true
+        assert_success 'rule is inserted at the top when UFW accepts the position' xvk_ufw_add_allow 443 xray-vps-kit-0123456789abcdef
+        assert_eq insert "$(cat "$fixture_ufw_calls")" 'insert alone is used when it works'
+        : > "$fixture_ufw_calls"
+        ufw_insert_works=false
+        assert_success 'rule is appended when UFW refuses position 1' xvk_ufw_add_allow 443 xray-vps-kit-0123456789abcdef
+        assert_eq 'insert allow' "$(tr '\n' ' ' < "$fixture_ufw_calls" | sed 's/ $//')" 'append follows the refused insert'
+        unset -f ufw
+    }
+    {
         # Callbacks receive the normalized prefix from transaction.sh: the
         # production '/' becomes an empty prefix, not a sandbox marker.
         # shellcheck source=lib/service.sh
