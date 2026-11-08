@@ -15,9 +15,7 @@
   bootstrap block is generated from `tools/bootstrap.block.in`.
 - Weekly workflow proposes new Xray-core pins as pull requests; Dependabot for Actions;
   advisory Debian CI job; `SECURITY.md`; Russian README.
-
 - `xray-client export --format singbox|clash`, `list --json`, `doctor` advisories and `--probe-target`.
-
 - Failed worker refresh restores the exact previous payload, candidate bundles are not deleted
   while selected, `doctor` verifies ownership and listener ownership, client mutations are
   serialized, installed workers are recognised under relative and symlinked invocation.
