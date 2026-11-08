@@ -26,7 +26,7 @@ xray-client add NAME [--fp firefox]   # создать клиента, пока�
 xray-client list                      # список
 xray-client show NAME                 # показать URI и QR ещё раз
 xray-client remove NAME               # отозвать клиента
-xray-client doctor                    # проверка сервера (ключи и URI не печатает)
+xray-client doctor [--probe-reality]  # проверка сервера (ключи и URI не печатает); --probe-reality — пробное REALITY-соединение через временный клиент
 xray-client recover                   # откатить изменение, прерванное сбоем или отключением питания
 ```
 

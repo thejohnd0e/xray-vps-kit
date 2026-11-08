@@ -51,8 +51,57 @@ xvk_client_export() {
     }
 }
 
+# Opt-in functional check: a throwaway client built from the first stored client dials this
+# server on loopback over REALITY and fetches one URL through the tunnel (default: the SNI
+# site itself, any HTTP answer counts; override with XVK_PROBE_URL). Prints nothing secret.
+# Exit: 0 tunnel works, 1 it does not, 2 the probe could not be set up (skipped).
+xvk_client_probe_reality() (
+    set -uo pipefail
+    local root=${1%/} cfg bundle core port url workdir client_pid='' socks status=1
+    cfg="$root/etc/xray-vps-kit"
+    command -v curl > /dev/null 2>&1 && command -v timeout > /dev/null 2>&1 || exit 2
+    bundle=$(jq -r .installed.bundleId "$cfg/state.json" 2> /dev/null) || exit 2
+    core="$root/opt/xray-vps-kit/releases/$bundle/xray"
+    [[ -x $core ]] || exit 2
+    [[ $(jq '.clients|length' "$cfg/state.json" 2> /dev/null) -ge 1 ]] || exit 2
+    port=$(jq -r .port "$cfg/state.json") || exit 2
+    url=${XVK_PROBE_URL:-}
+    [[ -n $url ]] || url="https://$(jq -r .serverName "$cfg/state.json")/"
+    workdir=$(umask 077; mktemp -d) || exit 2
+    trap '[[ -z $client_pid ]] || kill "$client_pid" 2> /dev/null; rm -rf -- "$workdir"' EXIT
+    for _ in 1 2 3 4 5 6 7 8; do
+        socks=$((20000 + RANDOM % 20000))
+        ss -H -ltn "sport = :$socks" 2> /dev/null | grep -q . || break
+    done
+    (umask 077; jq --argjson socks "$socks" '. as $s | .clients[0] as $c | {
+        log: {loglevel:"warning"},
+        inbounds: [{listen:"127.0.0.1",port:$socks,protocol:"socks",settings:{auth:"noauth",udp:false}}],
+        outbounds: [{protocol:"vless",settings:{vnext:[{address:"127.0.0.1",port:$s.port,
+            users:[{id:$c.uuid,encryption:"none",flow:"xtls-rprx-vision"}]}]},
+            streamSettings:{network:"tcp",security:"reality",realitySettings:{
+                serverName:$s.serverName,fingerprint:"chrome",publicKey:$s.publicKey,
+                shortId:$c.shortId,spiderX:""}}}]
+    }' "$cfg/state.json" > "$workdir/client.json") || exit 2
+    "$core" run -config "$workdir/client.json" > /dev/null 2>&1 &
+    client_pid=$!
+    for _ in $(seq 1 25); do
+        if (exec 3<>"/dev/tcp/127.0.0.1/$socks") 2> /dev/null; then break; fi
+        kill -0 "$client_pid" 2> /dev/null || exit 2
+        sleep 0.2
+    done
+    timeout 20 curl --silent --output /dev/null --max-time 15 --socks5-hostname "127.0.0.1:$socks" "$url" && status=0
+    exit "$status"
+)
+
 xvk_client_doctor() {
-    local root=${1%/} probe=${2:-} cfg bundle core port report issues=0
+    local root=${1%/} probe_target=false probe_reality=false cfg bundle core port report issues=0 option
+    shift
+    for option in "$@"; do
+        case $option in
+            --probe-target) probe_target=true ;;
+            --probe-reality) probe_reality=true ;;
+        esac
+    done
     cfg="${root%/}/etc/xray-vps-kit"
     report=$(mktemp) || return 1
     # shellcheck disable=SC2064
@@ -109,7 +158,7 @@ xvk_client_doctor() {
         value=$(jq -r '"last automatic update check: \(.outcome) at \(.timestamp)"' "$root/var/lib/xray-vps-kit-auto-update/last-run.json" 2> /dev/null) || value=''
         [[ -z $value ]] || note "$value"
     fi
-    if [[ $probe == --probe-target ]]; then
+    if [[ $probe_target == true ]]; then
         local target sni
         target=$(jq -r .target "$cfg/state.json" 2> /dev/null) || target=''
         sni=$(jq -r .serverName "$cfg/state.json" 2> /dev/null) || sni=''
@@ -120,6 +169,15 @@ xvk_client_doctor() {
                 note "REALITY target $target did not answer with TLS 1.3 from this server; check target and SNI"
             fi
         fi
+    fi
+    if [[ $probe_reality == true ]]; then
+        local probe_status=0
+        xvk_client_probe_reality "$root" || probe_status=$?
+        case $probe_status in
+            0) check 'REALITY tunnel works (temporary local client reached the target)' 0 ;;
+            2) note 'REALITY tunnel probe skipped (needs curl, timeout, the pinned core and one client)' ;;
+            *) check 'REALITY tunnel works (temporary local client reached the target)' 1 ;;
+        esac
     fi
     printf 'xray-vps-kit doctor\n'
     cat "$report"

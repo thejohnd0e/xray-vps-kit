@@ -211,7 +211,7 @@ xray-client export <name> --output FILE [--fp FP]  # URI only, to a new file wit
 xray-client export <name> --output FILE --format singbox|clash  # sing-box outbound / Clash Meta proxy, mode 0600
 xray-client list --json                  # client names as JSON (no secrets)
 xray-client remove <name>                # revoke a client
-xray-client doctor [--probe-target]      # health report (never prints keys, UUIDs or URIs)
+xray-client doctor [--probe-target] [--probe-reality]  # health report (never prints keys, UUIDs or URIs)
 xray-client recover                      # undo a change cut short by a crash or power loss
 xray-client version                      # kit and Xray-core versions
 ```
@@ -259,9 +259,17 @@ TCP congestion control other than bbr, the result of the last automatic update c
 manifest against the installed files, that the rendered config matches the installed state,
 that the selected core accepts that config, that the service unit is installed and active,
 and that the listening socket belongs to the service's own `MainPID` (another process on the
-same port is reported as a failure). It is not a live traffic probe and it ends with a fixed
+same port is reported as a failure). By default it is not a live traffic probe, and it ends with a fixed
 note about `--fp`, because a path problem between a client and the server is not visible from
 the server.
+
+`doctor --probe-reality` adds a functional check: it starts a throwaway Xray client on loopback
+(built from the first stored client, kept in a private temporary directory and removed
+afterwards), connects to this server over REALITY and fetches `https://<server name>/` through
+the tunnel; any HTTP answer counts. A failure is reported as `[FAIL]`. It needs `curl`, at least
+one client and outbound access from the server; set `XVK_PROBE_URL` to fetch another URL. It
+proves the listener, keys, `shortId`, flow and the server's outbound path, not the route from
+a client's network. Nothing secret is printed.
 
 ## Hiding the server from ping: `block-ping`
 

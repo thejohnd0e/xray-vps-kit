@@ -126,6 +126,13 @@ if [[ $selected == all || $selected == connect-and-survive-update ]]; then
     body=$(fetch_via "$main_uri" initial "http://$origin:8080/" || true)
     assert_eq "$(expect_body origin)" "$body" 'exported URI fetches the origin body through REALITY'
 
+    report=$(XVK_PROBE_URL="http://$origin:8080/" in_ns bash "$manager" doctor --probe-reality 2>&1 || true)
+    assert_success 'doctor --probe-reality passes against a working server'         grep -q -F '[ok]   REALITY tunnel works' <<< "$report"
+    assert_failure 'the probe output holds no UUID or key'         grep -q -F -e "$(jq -r '.clients[0].uuid' "$cfg/state.json")" -e "$(jq -r .publicKey "$cfg/state.json")" <<< "$report"
+    stop_background "$server_pid"
+    report=$(XVK_PROBE_URL="http://$origin:8080/" in_ns bash "$manager" doctor --probe-reality 2>&1 || true)
+    assert_success 'doctor --probe-reality fails when nothing serves the port'         grep -q -F '[FAIL] REALITY tunnel works' <<< "$report"
+    start_server
     restart_server
     body=$(fetch_via "$main_uri" restarted "http://$origin:8080/" || true)
     assert_eq "$(expect_body origin)" "$body" 'a freshly started server accepts the same profile'
