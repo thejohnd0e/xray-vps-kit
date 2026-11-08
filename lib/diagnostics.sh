@@ -34,7 +34,7 @@ QR code:
 }
 
 xvk_client_export() {
-    local root=${1%/} name=${2:-} output=${3:-} fp=${4:-chrome} cfg uri
+    local root=${1%/} name=${2:-} output=${3:-} fp=${4:-chrome} format=${5:-uri} cfg uri
     cfg="${root%/}/etc/xray-vps-kit"
     xvk_client_require_install "$root" || return 1
     xvk_validate_name "$name" || { xvk_error 'Invalid client name'; return 1; }
@@ -43,7 +43,7 @@ xvk_client_export() {
     xvk_validate_fp "$fp" || { xvk_error 'Invalid fingerprint'; return 1; }
     xvk_no_symlink_path "$output" || { xvk_error 'Refusing unsafe export path'; return 1; }
     [[ ! -e $output && ! -L $output ]] || { xvk_error 'Refusing to overwrite an existing export'; return 1; }
-    uri=$(xvk_render_uri "$cfg/state.json" "$name" "$fp") || { xvk_error 'No such client'; return 1; }
+    uri=$(xvk_render_profile "$cfg/state.json" "$name" "$fp" "$format") || { xvk_error 'No such client or unknown format'; return 1; }
     # Exclusive creation: noclobber plus a fresh umask means the file can never
     # be an existing target and is mode 0600 from birth.
     ( umask 077; set -C; printf '%s\n' "$uri" > "$output" ) || {
@@ -52,7 +52,7 @@ xvk_client_export() {
 }
 
 xvk_client_doctor() {
-    local root=${1%/} cfg bundle core port report issues=0
+    local root=${1%/} probe=${2:-} cfg bundle core port report issues=0
     cfg="${root%/}/etc/xray-vps-kit"
     report=$(mktemp) || return 1
     # shellcheck disable=SC2064
@@ -94,6 +94,33 @@ xvk_client_doctor() {
     if [[ $port =~ ^[0-9]+$ && $pid =~ ^[1-9][0-9]*$ && $listeners == *"pid=$pid,"* ]]; then
         check 'listening socket belongs to the service' 0
     else check 'listening socket belongs to the service' 1; fi
+    # Advisories never count as failures; they only point at things worth a look.
+    note() { printf '  [note] %s\n' "$1" >> "$report"; }
+    local value=''
+    if command -v timedatectl > /dev/null 2>&1; then
+        value=$(timedatectl show -p NTPSynchronized --value 2> /dev/null) || value=''
+        [[ $value != no ]] || note 'the system clock is not reported as synchronized; REALITY clients need an accurate clock'
+    fi
+    if command -v sysctl > /dev/null 2>&1; then
+        value=$(sysctl -n net.ipv4.tcp_congestion_control 2> /dev/null) || value=''
+        [[ -z $value || $value == bbr ]] || note "TCP congestion control is $value; bbr often helps on long paths"
+    fi
+    if [[ -f $root/var/lib/xray-vps-kit-auto-update/last-run.json ]]; then
+        value=$(jq -r '"last automatic update check: \(.outcome) at \(.timestamp)"' "$root/var/lib/xray-vps-kit-auto-update/last-run.json" 2> /dev/null) || value=''
+        [[ -z $value ]] || note "$value"
+    fi
+    if [[ $probe == --probe-target ]]; then
+        local target sni
+        target=$(jq -r .target "$cfg/state.json" 2> /dev/null) || target=''
+        sni=$(jq -r .serverName "$cfg/state.json" 2> /dev/null) || sni=''
+        if [[ -n $target ]] && command -v openssl > /dev/null 2>&1 && command -v timeout > /dev/null 2>&1; then
+            if timeout 10 openssl s_client -connect "$target" -servername "$sni" -tls1_3 < /dev/null 2> /dev/null | grep -q 'TLSv1.3'; then
+                note "REALITY target $target answers with TLS 1.3"
+            else
+                note "REALITY target $target did not answer with TLS 1.3 from this server; check target and SNI"
+            fi
+        fi
+    fi
     printf 'xray-vps-kit doctor\n'
     cat "$report"
     printf 'Checks failed: %s\n' "$issues"

@@ -208,8 +208,10 @@ xray-client add <name> [--fp FP]         # create a client, print its URI + QR c
 xray-client list                         # clients
 xray-client show <name> [--fp FP]        # print the URI + QR code of an existing client
 xray-client export <name> --output FILE [--fp FP]  # URI only, to a new file with mode 0600
+xray-client export <name> --output FILE --format singbox|clash  # sing-box outbound / Clash Meta proxy, mode 0600
+xray-client list --json                  # client names as JSON (no secrets)
 xray-client remove <name>                # revoke a client
-xray-client doctor                       # health report (never prints keys, UUIDs or URIs)
+xray-client doctor [--probe-target]      # health report (never prints keys, UUIDs or URIs)
 xray-client recover                      # undo a change cut short by a crash or power loss
 xray-client version                      # kit and Xray-core versions
 ```
@@ -248,6 +250,10 @@ A change (client add/remove, update) first writes a small journal and a snapshot
 files. If the process is killed or the server loses power half way, the next change refuses to
 continue before it has put that snapshot back; `xray-client recover` does the same on demand, and
 `doctor` reports a pending journal. Rollback after an ordinary failure works as before.
+
+`doctor` also prints `[note]` advisories that never count as failures: an unsynchronized clock, a
+TCP congestion control other than bbr, the result of the last automatic update check, and, with
+`--probe-target`, whether the REALITY target answers with TLS 1.3 from the server.
 
 `doctor` checks the server side only. It verifies the installed state, the ownership
 manifest against the installed files, that the rendered config matches the installed state,

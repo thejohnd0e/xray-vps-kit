@@ -13,6 +13,36 @@ xvk_render_uri() {
     ' "$state"
 }
 
+# Client profile for other apps, from the same state as the URI. Formats: uri, singbox (one
+# outbound object), clash (a Clash Meta proxies list). Output contains the client's secrets.
+xvk_render_profile() {
+    local state=$1 name=$2 fp=${3:-chrome} format=${4:-uri}
+    case $format in
+        uri) xvk_render_uri "$state" "$name" "$fp"; return ;;
+        singbox|clash)
+            xvk_validate_name "$name" && xvk_validate_fp "$fp" && xvk_state_validate "$state" || return 1
+            ;;
+        *) xvk_error 'Unknown profile format (uri, singbox, clash)'; return 1 ;;
+    esac
+    if [[ $format == singbox ]]; then
+        jq -er --arg name "$name" --arg fp "$fp" '
+            . as $state | .clients[] | select(.name==$name) |
+            {type:"vless",tag:.name,server:$state.endpoint,server_port:$state.port,uuid:.uuid,
+             flow:"xtls-rprx-vision",
+             tls:{enabled:true,server_name:$state.serverName,utls:{enabled:true,fingerprint:$fp},
+                  reality:{enabled:true,public_key:$state.publicKey,short_id:.shortId}}}
+        ' "$state"
+    else
+        jq -er --arg name "$name" --arg fp "$fp" '
+            . as $state | .clients[] | select(.name==$name) |
+            "proxies:\n  - name: \(.name|@json)\n    type: vless\n    server: \($state.endpoint|@json)\n    port: \($state.port)\n" +
+            "    uuid: \(.uuid|@json)\n    network: tcp\n    udp: true\n    tls: true\n    flow: xtls-rprx-vision\n" +
+            "    servername: \($state.serverName|@json)\n    client-fingerprint: \($fp|@json)\n    reality-opts:\n" +
+            "      public-key: \($state.publicKey|@json)\n      short-id: \(.shortId|@json)"
+        ' "$state"
+    fi
+}
+
 xvk_render_server() {
     local state=$1
     xvk_state_validate "$state" || return 1

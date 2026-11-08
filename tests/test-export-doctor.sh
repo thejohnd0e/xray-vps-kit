@@ -53,6 +53,20 @@ if [[ $selected != uri-text-qr-equivalence && $selected != doctor-integrity-and-
     ln -s "$scratch/missing" "$scratch/link"
     assert_failure 'dangling output symlink is refused' bash "$manager" export main-user --output "$scratch/link"
     assert_failure 'symlink target was not created' test -e "$scratch/missing"
+    uuid=$(jq -r '.clients[] | select(.name=="main-user") | .uuid' "$state")
+    assert_success 'sing-box export succeeds' bash "$manager" export main-user --output "$scratch/export-singbox" --format singbox --fp firefox
+    assert_eq 600 "$(stat -c %a "$scratch/export-singbox")" 'sing-box export is private'
+    assert_eq "$uuid" "$(jq -r .uuid "$scratch/export-singbox")" 'sing-box outbound carries the client uuid'
+    assert_eq firefox "$(jq -r .tls.utls.fingerprint "$scratch/export-singbox")" 'sing-box outbound carries the fingerprint'
+    assert_eq "$(jq -r .publicKey "$state")" "$(jq -r .tls.reality.public_key "$scratch/export-singbox")" 'sing-box outbound carries the public key'
+    assert_success 'Clash export succeeds' bash "$manager" export main-user --output "$scratch/export-clash" --format clash
+    assert_success 'Clash proxy names the uuid' grep -q -F "uuid: \"$uuid\"" "$scratch/export-clash"
+    assert_success 'Clash proxy is a REALITY Vision entry' grep -q -F 'flow: xtls-rprx-vision' "$scratch/export-clash"
+    assert_failure 'unknown export format is refused' bash "$manager" export main-user --output "$scratch/export-fmt" --format xml
+    assert_failure 'refused format created no file' test -e "$scratch/export-fmt"
+    assert_failure 'a repeated option is refused' bash "$manager" export main-user --output "$scratch/export-dup" --format clash --format uri
+    assert_eq '[{"name":"main-user"}]' "$(bash "$manager" list --json)" 'list --json prints names only'
+    assert_failure 'list rejects other arguments' bash "$manager" list --yaml
     doctor_status=0
     bash "$manager" doctor > "$scratch/doctor" 2>&1 || doctor_status=$?
     assert_failure 'sandbox doctor cannot falsely report live service health' test "$doctor_status" -eq 0

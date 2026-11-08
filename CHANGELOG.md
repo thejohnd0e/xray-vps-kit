@@ -16,6 +16,8 @@
 - Weekly workflow proposes new Xray-core pins as pull requests; Dependabot for Actions;
   advisory Debian CI job; `SECURITY.md`; Russian README.
 
+- `xray-client export --format singbox|clash`, `list --json`, `doctor` advisories and `--probe-target`.
+
 ## 0.1.1
 
 - Failed worker refresh restores the exact previous payload, candidate bundles are not deleted

@@ -27,6 +27,13 @@ xvk_client_list() {
     jq -r '.clients[].name' "$cfg/state.json"
 }
 
+xvk_client_list_json() {
+    local root=${1%/} cfg
+    cfg="${root%/}/etc/xray-vps-kit"
+    xvk_client_require_install "$root" || return 1
+    jq -c '[.clients[] | {name}]' "$cfg/state.json"
+}
+
 xvk_client_mutate() {
     local root=${1%/} operation=${2:-} name=${3:-} lock
     lock="${root%/}/run/lock/xray-vps-kit.lock"
