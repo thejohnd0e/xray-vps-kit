@@ -54,7 +54,10 @@ xvk_platform() {
     (( $# == 3 )) || return 1
     case "$1:$2" in
         debian:12|debian:13|ubuntu:22.04|ubuntu:24.04) ;;
-        *) xvk_error 'Unsupported operating system'; return 1 ;;
+        *)
+            # Escape hatch for derivatives and newer releases; nothing here is tested on them.
+            [[ ${XVK_ALLOW_UNSUPPORTED_OS:-} == 1 ]] || { xvk_error 'Unsupported operating system'; return 1; }
+            xvk_error "Warning: unsupported operating system $1 $2, continuing because XVK_ALLOW_UNSUPPORTED_OS=1" ;;
     esac
     case $3 in
         x86_64|amd64) printf 'amd64\n' ;;

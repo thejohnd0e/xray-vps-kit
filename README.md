@@ -49,6 +49,12 @@ the port and SNI (press Enter for the defaults) and installs without a final con
 prints the first client's URI and QR code; to see them again later run `xray-client show user_01`.
 For automation add `--non-interactive`.
 
+To install the code of a reviewed tag or commit instead of the newest `master`, set `XVK_REF`
+(for any of the one-line commands): `... | XVK_REF=v0.1.1 bash -s -- ...`. On other Debian/Ubuntu
+releases the OS check can be skipped with `XVK_ALLOW_UNSUPPORTED_OS=1`; nothing is tested there.
+See also [SECURITY.md](SECURITY.md) and [CHANGELOG.md](CHANGELOG.md). A Russian summary is in
+[README.ru.md](README.ru.md).
+
 The installer also exposes the bundled core as `xray` through
 `/usr/local/bin/xray`, a symlink to `/opt/xray-vps-kit/current/xray`.
 Run `xray version` for the core version, or `xray-client version` for both kit and core versions.

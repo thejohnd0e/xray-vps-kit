@@ -55,7 +55,7 @@ if [[ $selected == all || $selected == curl-pipe-bootstrap ]]; then
     repo="$scratch/repo"
     mkdir "$repo"
     cp -a "$PROJECT_DIR/install.sh" "$PROJECT_DIR/update.sh" "$PROJECT_DIR/uninstall.sh" "$PROJECT_DIR/auto-update.sh" "$PROJECT_DIR/xray-client"         "$PROJECT_DIR/VERSION" "$PROJECT_DIR/lib" "$PROJECT_DIR/releases" "$PROJECT_DIR/templates" "$repo/"
-    git -C "$repo" init -q
+    git -C "$repo" init -q -b master
     git -C "$repo" add -A
     git -C "$repo" -c user.name=test -c user.email=test@example.invalid commit -q -m fixture
     src="$scratch/src-copy"
@@ -171,6 +171,24 @@ STUB
     assert_eq "$(block_of install.sh)" "$(block_of update.sh)" 'install.sh and update.sh share one bootstrap block'
     assert_eq "$(block_of install.sh)" "$(block_of uninstall.sh)" 'install.sh and uninstall.sh share one bootstrap block'
     assert_eq "$(block_of install.sh)" "$(block_of auto-update.sh)" 'optional updater shares the same guarded bootstrap block'
+    assert_success 'the bootstrap block matches its single source' bash "$PROJECT_DIR/tools/sync-bootstrap.sh" --check
+    # XVK_REF pins the checkout to a tag; a later run without it returns to master.
+    git -C "$repo" -c user.name=t -c user.email=t@e.invalid tag pin-test
+    printf 'later
+' > "$repo/AFTER_PIN"
+    git -C "$repo" add AFTER_PIN
+    git -C "$repo" -c user.name=t -c user.email=t@e.invalid commit -q -m later
+    pinned() {
+        (cd /usr && XVK_REF="$1" XVK_SRC="$scratch/ref-src" XVK_REPO="file://$repo" bash -s -- --help < "$PROJECT_DIR/install.sh")
+    }
+    assert_success 'a pinned bootstrap checks out the tag' pinned pin-test
+    assert_failure 'the pinned checkout does not contain later commits' test -e "$scratch/ref-src/AFTER_PIN"
+    assert_success 'repeating the pinned bootstrap works on a detached checkout' pinned pin-test
+    assert_failure 'an unknown ref is refused' pinned no-such-ref
+    assert_failure 'a malformed ref is refused' pinned '../x'
+    assert_success 'an unpinned run returns to master and fast-forwards' bash -c "
+        cd /usr && XVK_SRC='$scratch/ref-src' XVK_REPO='file://$repo' bash -s -- --help < '$PROJECT_DIR/install.sh' > /dev/null"
+    assert_success 'the unpinned run sees the later commit' test -e "$scratch/ref-src/AFTER_PIN"
     mkdir "$scratch/not-a-clone"
     assert_failure 'a directory that is not a clone is refused' bash -c "
         cd /usr && XVK_SRC='$scratch/not-a-clone' XVK_REPO='file://$repo' bash -s -- --help < '$PROJECT_DIR/install.sh'"

@@ -1,0 +1,38 @@
+name: Update Xray-core pin
+
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve the newest stable release
+        id: lock
+        run: |
+          version=$(bash tools/update-lock.sh)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Open a pull request
+        if: steps.lock.outputs.version != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.lock.outputs.version }}
+        run: |
+          branch="xray-core-$VERSION"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add releases/xray.lock.json
+          git commit -m "Pin Xray-core $VERSION"
+          git push --force-with-lease origin "$branch"
+          gh pr create --base master --head "$branch" \
+            --title "Pin Xray-core $VERSION" \
+            --body "Automated pin update from the official release metadata (SHA256 digests as published by GitHub). CI runs the sandbox suites and the REALITY traffic test against the new core; review before merging." \
+            || gh pr view "$branch" --json url
