@@ -3,6 +3,19 @@
 Установщик Xray-core (VLESS + REALITY + XTLS Vision, TCP 443) для VPS и команда `xray-client` для
 управления клиентами. Полная документация на английском: [README.md](README.md).
 
+## Часть семейства VPS-китов
+
+`quality-vps-kit` — один из нескольких независимых инструментов одного процесса: сначала оценить VPS, затем поднять на нём VPN/proxy-сервисы.
+
+| Проект | Назначение |
+|---|---|
+| [quality-vps-kit](https://github.com/thejohnd0e/quality-vps-kit) | read-only оценка нового VPS |
+| **xray-vps-kit** (этот репозиторий) | установщик сервера VLESS/Reality и управление клиентами |
+| [awg-vps-kit](https://github.com/thejohnd0e/awg-vps-kit) | установщик сервера AmneziaWG и управление клиентами |
+| [hysteria-vps-kit](https://github.com/thejohnd0e/hysteria-vps-kit) | установщик сервера Hysteria2 и управление клиентами |
+
+Киты независимы: ни один не изменяет и не требует остальных.
+
 ## Требования
 
 Debian 12/13 или Ubuntu 22.04/24.04, systemd и apt, root, публичный IPv4 и открытый TCP-порт

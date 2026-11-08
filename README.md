@@ -4,6 +4,19 @@
 Xray-core (VLESS + REALITY + XTLS Vision) on TCP 443 and the `xray-client` command to
 manage clients.
 
+## Part of the VPS kit family
+
+`quality-vps-kit` is one of several independent tools for the same workflow: evaluate a VPS first, then set up VPN/proxy services on it.
+
+| Project | Purpose |
+|---|---|
+| [quality-vps-kit](https://github.com/thejohnd0e/quality-vps-kit) | read-only evaluation of a fresh VPS |
+| **xray-vps-kit** (this repo) | VLESS/Reality server installer and client management |
+| [awg-vps-kit](https://github.com/thejohnd0e/awg-vps-kit) | AmneziaWG server installer and client management |
+| [hysteria-vps-kit](https://github.com/thejohnd0e/hysteria-vps-kit) | Hysteria2 server installer and client management |
+
+The kits are independent: none of them modifies or requires the others.
+
 ## Related Projects
 
 These projects complement each other: the kits set up the servers, and the proxy containers bring a
