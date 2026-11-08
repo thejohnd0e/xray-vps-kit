@@ -41,9 +41,9 @@ xvk_service_health() {
     xvk_error 'Service did not reach stable active state with its intended TCP socket'; return 1
 }
 
-# The unit bounds crash restarts with StartLimitBurst. Operator-driven restarts count
-# toward that limit too, so a few quick client changes would otherwise be refused by
-# systemd and roll back; clearing the counter first keeps crash-loop protection intact.
+# The unit restarts after any exit (Restart=always, no start limit) so a crash cannot
+# leave the server unreachable. Clearing a failed state first keeps an operator-driven
+# restart working even on hosts that still run an older unit with a start limit.
 xvk_service_restart() {
     systemctl reset-failed xray-vps-kit.service > /dev/null 2>&1 || true
     systemctl daemon-reload && systemctl restart xray-vps-kit.service

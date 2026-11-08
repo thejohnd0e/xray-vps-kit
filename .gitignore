@@ -25,3 +25,5 @@ Desktop.ini
 /TODO.md
 /.omo/
 /pyrightconfig.json
+__pycache__/
+*.pyc
