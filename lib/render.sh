@@ -7,7 +7,7 @@ xvk_render_uri() {
     xvk_validate_name "$name" && xvk_validate_fp "$fp" && xvk_state_validate "$state" || return 1
     jq -er --arg name "$name" --arg fp "$fp" '
         . as $state | .clients[] | select(.name==$name) |
-        "vless://" + .uuid + "@" + $state.endpoint + ":" + ($state.port|tostring) +
+        "vless://" + .uuid + "@" + (if ($state.endpoint|contains(":")) then "[" + $state.endpoint + "]" else $state.endpoint end) + ":" + ($state.port|tostring) +
         "?encryption=none&type=tcp&security=reality&flow=xtls-rprx-vision&sni=" + ($state.serverName|@uri) +
         "&fp=" + $fp + "&pbk=" + ($state.publicKey|@uri) + "&sid=" + (.shortId|@uri) + "#" + (.name|@uri)
     ' "$state"

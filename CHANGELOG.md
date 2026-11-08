@@ -16,6 +16,7 @@
 - Weekly workflow proposes new Xray-core pins as pull requests; Dependabot for Actions;
   advisory Debian CI job; `SECURITY.md`; Russian README.
 - `xray-client export --format singbox|clash`, `list --json`, `doctor` advisories and `--probe-target`.
+- IPv6: `install.sh --ipv6` and `xray-client ipv6 on|off` manage the UFW IPv6 row (owned with the IPv4 one) and a doctor check; IPv6 endpoints in URIs are bracketed.
 - `xray-client doctor --probe-reality`: functional REALITY check through a throwaway local client.
 - Failed worker refresh restores the exact previous payload, candidate bundles are not deleted
   while selected, `doctor` verifies ownership and listener ownership, client mutations are

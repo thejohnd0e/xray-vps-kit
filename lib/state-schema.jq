@@ -12,7 +12,9 @@ def client:
     and (.uuid | type == "string" and test("^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"))
     and (.shortId | type == "string" and test("^[a-f0-9]{16}$"));
 length == 1 and (.[0] |
-    fields(["schemaVersion","generation","transport","endpoint","port","target","serverName","privateKey","publicKey","clients","installed","lastSuccessfulSnapshot"])
+    (fields(["schemaVersion","generation","transport","endpoint","port","target","serverName","privateKey","publicKey","clients","installed","lastSuccessfulSnapshot"])
+        or (fields(["schemaVersion","generation","transport","endpoint","port","target","serverName","privateKey","publicKey","clients","installed","lastSuccessfulSnapshot","ipv6"])
+            and (.ipv6 | type == "boolean")))
     and .schemaVersion == 1 and .transport == "reality-tcp"
     and (.generation | boundedint(0; 9007199254740990))
     and (.endpoint | type == "string") and (.port | boundedint(1; 65535))

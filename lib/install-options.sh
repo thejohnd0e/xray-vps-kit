@@ -8,7 +8,8 @@ Usage: bash install.sh [OPTIONS]
   --first-client NAME     First identity (default:main-user)
   --no-first-client       Do not create an initial identity
   --fp FP                 TLS fingerprint in the first client's printed URI (default:chrome)
-  --endpoint IPV4_OR_DNS  Public endpoint; otherwise discover IPv4 via HTTPS
+  --endpoint ADDR         Public endpoint (IPv4, IPv6 or DNS); otherwise discover IPv4 via HTTPS
+  --ipv6                  Manage IPv6 reachability: open the IPv6 UFW rule and check it in doctor
   --target HOST:PORT      REALITY target (default:selected SNI:443)
   --non-interactive       Use validated defaults/flags without questions
   --restore               Restore preserved identities and settings
@@ -22,7 +23,7 @@ xvk_install_options() {
     XVK_PORT=443 XVK_SNI=github.com XVK_FIRST=main-user XVK_FP=chrome XVK_ENDPOINT='' XVK_TARGET=''
     XVK_ROOT=/ XVK_ARCHIVE='' XVK_AUTOMATION=false XVK_SANDBOX=false XVK_RESTORE=false
     XVK_PORT_SET=false XVK_SNI_SET=false XVK_FIRST_SET=false XVK_TARGET_SET=false XVK_FP_SET=false
-    XVK_FRESH_FLAGS=false XVK_NO_FIRST=false
+    XVK_FRESH_FLAGS=false XVK_NO_FIRST=false XVK_IPV6=false
     while (( $# )); do
         case $1 in
             --port|--server-name|--first-client|--fp|--endpoint|--target|--root|--archive)
@@ -42,6 +43,7 @@ xvk_install_options() {
             --no-service) XVK_SANDBOX=true; shift ;;
             --no-first-client) XVK_NO_FIRST=true; XVK_FRESH_FLAGS=true; shift ;;
             --restore) XVK_RESTORE=true; shift ;;
+            --ipv6) XVK_IPV6=true; XVK_FRESH_FLAGS=true; shift ;;
             *) xvk_error 'Unknown installer argument'; return 1 ;;
         esac
     done
@@ -60,11 +62,11 @@ xvk_install_options() {
         if ! xvk_validate_port "$XVK_PORT" || ! xvk_validate_host "$XVK_SNI"; then xvk_error 'Invalid port or SNI'; return 1; fi
         [[ $XVK_NO_FIRST == true ]] || xvk_validate_name "$XVK_FIRST" || { xvk_error 'Invalid first client'; return 1; }
         xvk_validate_fp "$XVK_FP" || { xvk_error 'Invalid fingerprint (see install.sh --help)'; return 1; }
-        [[ -z $XVK_ENDPOINT ]] || xvk_validate_host "$XVK_ENDPOINT" || { xvk_error 'Invalid endpoint'; return 1; }
+        [[ -z $XVK_ENDPOINT ]] || xvk_validate_endpoint "$XVK_ENDPOINT" || { xvk_error 'Invalid endpoint'; return 1; }
         [[ $XVK_TARGET_SET != true ]] || xvk_validate_target "$XVK_TARGET" || { xvk_error 'Invalid target'; return 1; }
     fi
     # Non-secret parsed configuration is shared with preflight/bundle modules.
-    export XVK_PORT_SET XVK_SNI_SET XVK_ARCHIVE
+    export XVK_PORT_SET XVK_SNI_SET XVK_ARCHIVE XVK_IPV6
 }
 
 xvk_prompt_value() {

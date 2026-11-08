@@ -10,7 +10,7 @@ xvk_state_validate() {
     jq -e -s -f "$lib_dir/state-schema.jq" "$file" > /dev/null 2>&1 || {
         xvk_error 'Invalid or unsupported state schema'; return 1;
     }
-    if ! xvk_validate_host "$(jq -r .endpoint "$file")" ||
+    if ! xvk_validate_endpoint "$(jq -r .endpoint "$file")" ||
         ! xvk_validate_host "$(jq -r .serverName "$file")" ||
         ! xvk_validate_target "$(jq -r .target "$file")"; then
         xvk_error 'Invalid state endpoint or target'; return 1

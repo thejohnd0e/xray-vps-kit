@@ -143,6 +143,12 @@ xvk_client_doctor() {
     if [[ $port =~ ^[0-9]+$ && $pid =~ ^[1-9][0-9]*$ && $listeners == *"pid=$pid,"* ]]; then
         check 'listening socket belongs to the service' 0
     else check 'listening socket belongs to the service' 1; fi
+    if [[ $(jq -r '.ipv6 // false' "$cfg/state.json" 2> /dev/null) == true ]]; then
+        # Dual stack: the service must hold a wildcard IPv6 socket on the port.
+        if [[ $listeners == *"[::]:$port "* || $listeners == *"[::]:$port"$'\n'* || $listeners == *"*:$port "* ]]; then
+            check 'IPv6 listener present' 0
+        else check 'IPv6 listener present' 1; fi
+    fi
     # Advisories never count as failures; they only point at things worth a look.
     note() { printf '  [note] %s\n' "$1" >> "$report"; }
     local value=''

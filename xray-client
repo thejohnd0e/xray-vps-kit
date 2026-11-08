@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 bundle=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
-for module in common state render ownership transaction service clients diagnostics; do
+for module in common state render ownership firewall transaction service clients diagnostics; do
     # shellcheck source=/dev/null
     source "$bundle/lib/$module.sh"
 done
 
 usage() {
-    printf 'Usage: xray-client help|version|add NAME|list|show NAME|export NAME --output FILE|remove NAME|doctor|recover\n'
+    printf 'Usage: xray-client help|version|add NAME|list|show NAME|export NAME --output FILE|remove NAME|doctor|ipv6|recover\n'
 }
 
 help_text() {
@@ -25,6 +25,7 @@ xray-client: manage VLESS + REALITY clients (run as root)
                                           health report (never prints keys, UUIDs or URIs);
                                           --probe-target asks the REALITY target for TLS 1.3,
                                           --probe-reality dials this server with a throwaway client
+  xray-client ipv6 on|off                 manage IPv6 reachability (UFW IPv6 rule, doctor check); restarts the service
   xray-client recover                     undo a change that was cut short by a crash or power loss
   xray-client version                     kit and Xray-core versions
   xray-client help                        this text
@@ -105,6 +106,10 @@ case ${1:-help} in
         parse_export_options "${@:5}" || { usage >&2; exit 1; }
         root=$(management_root) || exit 1
         xvk_client_export "$root" "$2" "$4" "$fp" "$format" ;;
+    ipv6)
+        (( $# == 2 )) || { usage >&2; exit 1; }
+        root=$(management_root) || exit 1
+        xvk_client_ipv6 "$root" "$2" ;;
     recover)
         (( $# == 1 )) || { usage >&2; exit 1; }
         root=$(management_root) || exit 1

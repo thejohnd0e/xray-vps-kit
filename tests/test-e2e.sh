@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 case "${1:-all}" in
-    all|connect-and-survive-update|invalid-revoked-and-private) selected=${1:-all} ;;
+    all|connect-and-survive-update|invalid-revoked-and-private|ipv6-dual-stack) selected=${1:-all} ;;
     *) printf 'Unknown e2e case\n' >&2; exit 1 ;;
 esac
 # Real transport proof: privileged because it needs a network namespace, so it
@@ -70,6 +70,7 @@ setup_namespace() {
     for address in "$endpoint" "$target" "$origin" 10.77.0.1 169.254.169.254; do
         in_ns ip addr add "$address/32" dev lo
     done
+    in_ns ip -6 addr add fd00:e2e::1/128 dev lo
     openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 1 \
         -subj /CN=e2e-target.test -keyout "$scratch/target.key" -out "$scratch/target.crt" 2> /dev/null
     start_background "$scratch/fixtures.log" python3 "$TESTS_DIR/helpers/e2e-fixtures.py" \
@@ -208,4 +209,27 @@ if [[ $selected == all || $selected == invalid-revoked-and-private ]]; then
     done
     body=$(fetch_via "$second_uri" control-after "$origin_url" || true)
     assert_eq "$(expect_body origin)" "$body" 'the same client still reaches the public origin after the blocked attempts'
+fi
+
+if [[ $selected == all || $selected == ipv6-dual-stack ]]; then
+    # Xray turns the 0.0.0.0 wildcard into one dual-stack socket, so IPv6 clients already work
+    # on the default listener; the ipv6 switch only manages the firewall side and the state.
+    ipv6_client=main-user
+    [[ $selected != all ]] || ipv6_client=second-user
+    v4_uri=$(uri_of "$ipv6_client")
+    v6_uri=${v4_uri/@$endpoint:/@[fd00:e2e::1]:}
+    # shellcheck disable=SC2016
+    assert_success 'the listener is a wildcard socket for both families' bash -c 'ip netns exec "$1" /usr/bin/ss -H -ltn "sport = :443" | grep -q -e "^LISTEN.*[[:space:]]\*:443" -e "\[::\]:443"' _ "$namespace"
+    body=$(fetch_via "$v6_uri" v6-default "http://$origin:8080/" || true)
+    assert_eq "$(expect_body origin)" "$body" 'a client reaches the origin over IPv6 through REALITY'
+    assert_success 'ipv6 on commits' bash "$manager" ipv6 on
+    restart_server
+    body=$(fetch_via "$v6_uri" v6-on "http://$origin:8080/" || true)
+    assert_eq "$(expect_body origin)" "$body" 'IPv6 keeps working with the switch on'
+    body=$(fetch_via "$v4_uri" v4-on "http://$origin:8080/" || true)
+    assert_eq "$(expect_body origin)" "$body" 'IPv4 keeps working with the switch on'
+    # The suite puts a fake ss first on PATH; doctor needs the real one here.
+    report=$(in_ns env PATH="/usr/sbin:/usr/bin:/sbin:/bin" bash "$manager" doctor 2>&1 || true)
+    assert_success 'doctor sees the IPv6 listener' grep -q -F '[ok]   IPv6 listener present' <<< "$report"
+    assert_success 'ipv6 off commits' bash "$manager" ipv6 off
 fi

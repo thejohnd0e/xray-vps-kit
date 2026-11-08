@@ -41,6 +41,7 @@ xray-client add NAME [--fp firefox]   # создать клиента, пока�
 xray-client list                      # список
 xray-client show NAME                 # показать URI и QR ещё раз
 xray-client remove NAME               # отозвать клиента
+xray-client ipv6 on|off              # правило UFW для IPv6 и проверка в doctor (сокет Xray и так dual-stack)
 xray-client doctor [--probe-reality]  # проверка сервера (ключи и URI не печатает); --probe-reality — пробное REALITY-соединение через временный клиент
 xray-client recover                   # откатить изменение, прерванное сбоем или отключением питания
 ```

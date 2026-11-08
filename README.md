@@ -171,7 +171,8 @@ git clone https://github.com/thejohnd0e/xray-vps-kit.git && cd xray-vps-kit
 | `--first-client NAME` | `main-user` | first identity |
 | `--no-first-client` | | do not create an identity |
 | `--fp FP` | `chrome` | TLS fingerprint in the URI printed for the first client (same values as `xray-client --fp`; not stored) |
-| `--endpoint IPV4/HOST` | auto (HTTPS lookup) | address written into client URIs |
+| `--endpoint ADDR` | auto (IPv4 HTTPS lookup) | IPv4, IPv6 (without brackets) or DNS name written into client URIs |
+| `--ipv6` | off | also listen on IPv6 (one dual-stack socket on `::`) and open the IPv6 UFW rule |
 | `--restore` | | recreate the service from preserved config (after `uninstall --keep-config`) |
 | `--archive FILE` | download | local Xray-core archive; the pinned SHA256 is still checked |
 | `--non-interactive` | | use flags and defaults without questions |
@@ -228,6 +229,7 @@ xray-client export <name> --output FILE --format singbox|clash  # sing-box outbo
 xray-client list --json                  # client names as JSON (no secrets)
 xray-client remove <name>                # revoke a client
 xray-client doctor [--probe-target] [--probe-reality]  # health report (never prints keys, UUIDs or URIs)
+xray-client ipv6 on|off                  # listen on IPv6 too (dual stack) or IPv4 only; restarts the service
 xray-client recover                      # undo a change cut short by a crash or power loss
 xray-client version                      # kit and Xray-core versions
 ```
@@ -286,6 +288,25 @@ the tunnel; any HTTP answer counts. A failure is reported as `[FAIL]`. It needs 
 one client and outbound access from the server; set `XVK_PROBE_URL` to fetch another URL. It
 proves the listener, keys, `shortId`, flow and the server's outbound path, not the route from
 a client's network. Nothing secret is printed.
+
+## IPv6
+
+Xray turns the `0.0.0.0` wildcard into one dual-stack socket, so a host with working IPv6 already
+accepts IPv6 clients on the same port (`ss` shows it as `*:443`). What the kit did not do was open
+the IPv6 side of UFW, so clients on IPv6 were refused whenever UFW was active. `install.sh --ipv6`
+(or `xray-client ipv6 on` on an installed kit, which restarts the service) makes the kit manage that:
+
+- UFW: when the kit owns a rule, an IPv6 row with the same marker is added next to the IPv4 one
+  (it needs `IPV6=yes` in `/etc/default/ufw`) and checked through `ip6tables`. `ipv6 off` and
+  `uninstall` delete both rows, but only when every row still looks exactly as the kit wrote it.
+- `doctor` checks that the service holds a wildcard socket for the port when the switch is on.
+- The kit refuses to turn it on when IPv6 is missing or disabled in the kernel, or when
+  `net.ipv6.bindv6only=1` (a `0.0.0.0` listener would then be IPv4-only).
+- The client address is not guessed. Pass `--endpoint 2001:db8::1` (bracket-free) at install time to put an
+  IPv6 address into the profiles, or use a DNS name with both A and AAAA records. URIs bracket the
+  address automatically (the part after `@` becomes `[2001:db8::1]:443`); sing-box and Clash profiles carry it as-is.
+- The private-network block list already covers IPv6 (`::1`, `fc00::/7`, `fe80::/10`, ...).
+- Your provider's firewall is separate: allow the TCP port for IPv6 there too.
 
 ## Hiding the server from ping: `block-ping`
 

@@ -50,9 +50,9 @@ xvk_install_locked() (
     else
         keys=$(xvk_new_keys "$temporary/bundle/xray") || exit 1
         jq -n --arg endpoint "$XVK_ENDPOINT" --argjson port "$XVK_PORT" --arg sni "$XVK_SNI" --arg target "$XVK_TARGET" \
-            --argjson keys "$keys" --arg kit "$kit" --arg core "$core_version" --arg bundle "$bundle" --arg sha "$digest" \
+            --argjson keys "$keys" --arg kit "$kit" --arg core "$core_version" --arg bundle "$bundle" --arg sha "$digest" --argjson ipv6 "$XVK_IPV6" \
             '{schemaVersion:1,generation:1,transport:"reality-tcp",endpoint:$endpoint,port:$port,target:$target,serverName:$sni,
-            privateKey:$keys.privateKey,publicKey:$keys.publicKey,clients:[],installed:{kitVersion:$kit,coreVersion:$core,bundleId:$bundle,contentSha256:$sha},lastSuccessfulSnapshot:null}' \
+            privateKey:$keys.privateKey,publicKey:$keys.publicKey,clients:[],installed:{kitVersion:$kit,coreVersion:$core,bundleId:$bundle,contentSha256:$sha},lastSuccessfulSnapshot:null} + (if $ipv6 then {ipv6:true} else {} end)' \
             > "$temporary/state.json" || exit 1
         chmod 600 "$temporary/state.json" || exit 1
         if [[ $XVK_NO_FIRST != true ]]; then
@@ -88,7 +88,7 @@ xvk_install_locked() (
         chown root:xray-vps-kit "$cfg" "$cfg/config.json" || exit 1
         # Assign only after success: a failed substitution would leave rule empty and
         # make the rollback treat an empty record as a corrupt firewall record.
-        opened=$(xvk_firewall_open "$XVK_PORT") || exit 1
+        opened=$(xvk_firewall_open "$XVK_PORT" "$(jq -r '.ipv6 // false' "$temporary/state.json")") || exit 1
         rule=$opened
     fi
     xvk_ownership_manifest "${root:-/}" "${root:-/}" "$rule" > "$temporary/ownership.json" || exit 1

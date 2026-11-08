@@ -44,6 +44,30 @@ xvk_validate_host() {
     fi
 }
 
+# Literal IPv6 address without brackets: hex groups, at most one "::", 8 groups when no "::".
+xvk_validate_ipv6() {
+    local value=${1:-} group compressed=false count=0
+    local -a groups
+    [[ -n $value && ${#value} -le 45 && $value == *:* && $value != *[!0-9a-fA-F:]* ]] || return 1
+    [[ $value != *:::* ]] || return 1
+    if [[ $value == *::* ]]; then
+        [[ ${value#*::} != *::* ]] || return 1
+        compressed=true
+    fi
+    # A single leading or trailing colon is only valid as part of "::".
+    [[ $value != :[!:]* && $value != *[!:]: ]] || return 1
+    IFS=: read -r -a groups <<< "$value"
+    for group in "${groups[@]}"; do
+        [[ -z $group ]] && continue
+        [[ $group =~ ^[0-9a-fA-F]{1,4}$ ]] || return 1
+        count=$((count + 1))
+    done
+    if [[ $compressed == true ]]; then (( count <= 7 )); else (( count == 8 )); fi
+}
+
+# What a client dials: a DNS name, an IPv4 address or an IPv6 literal.
+xvk_validate_endpoint() { xvk_validate_host "${1:-}" || xvk_validate_ipv6 "${1:-}"; }
+
 xvk_validate_target() {
     local value=${1:-}
     [[ $value == *:* && ${value#*:} != *:* ]] || return 1

@@ -30,7 +30,7 @@ xvk_probe_target() (
 )
 
 xvk_install_preflight() {
-    local project=$1 value preserved
+    local project=$1 value preserved ipv6
     : "${XVK_ROOT:?installer options must be parsed first}"
     if [[ $XVK_SANDBOX != true && $EUID != 0 ]]; then xvk_error 'Production installation requires root'; return 1; fi
     XVK_ARCH=$(xvk_detect_platform) || return 1
@@ -87,7 +87,7 @@ xvk_install_preflight() {
             [[ $XVK_ENDPOINT =~ ^[0-9.]+$ ]] || { xvk_error 'IPv4 discovery did not return IPv4'; return 1; }
         fi
     fi
-    xvk_validate_host "$XVK_ENDPOINT" && xvk_validate_target "$XVK_TARGET" && xvk_port_free "$XVK_PORT" || return 1
+    xvk_validate_endpoint "$XVK_ENDPOINT" && xvk_validate_target "$XVK_TARGET" && xvk_port_free "$XVK_PORT" || return 1
     if [[ $XVK_RESTORE == true ]]; then xvk_probe_target "$XVK_TARGET" "$XVK_SNI" || return 1; fi
     if [[ $XVK_SANDBOX != true ]]; then
         [[ ! -e /usr/local/bin/xray-client && ! -L /usr/local/bin/xray-client && ! -e /etc/systemd/system/xray-vps-kit.service && ! -L /etc/systemd/system/xray-vps-kit.service ]] || { xvk_error 'Runtime resources already exist'; return 1; }
@@ -95,6 +95,11 @@ xvk_install_preflight() {
         [[ ! -e /usr/local/bin/xray && ! -L /usr/local/bin/xray && ! -e /usr/local/etc/xray && ! -e /etc/xray && ! -e /usr/local/x-ui && ! -e /etc/x-ui ]] || { xvk_error 'Foreign Xray installation found'; return 1; }
         xvk_service_account_check || return 1
         xvk_firewall_preflight "$XVK_PORT" || return 1
+    fi
+    if [[ $XVK_SANDBOX != true ]]; then
+        ipv6=$XVK_IPV6
+        [[ $XVK_RESTORE != true ]] || ipv6=$(jq -r '.ipv6 // false' "$preserved")
+        [[ $ipv6 != true ]] || xvk_ipv6_available || return 1
     fi
     value=$XVK_FIRST
     [[ $XVK_NO_FIRST != true ]] || value=none

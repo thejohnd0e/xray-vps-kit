@@ -48,6 +48,18 @@ if [[ $selected != malformed-state-and-future-transport ]]; then
     assert_failure 'unknown fingerprint is refused' xvk_render_uri "$scratch/state.json" test-device bogus
     assert_failure 'fingerprint cannot smuggle extra URI parameters' xvk_render_uri "$scratch/state.json" test-device 'chrome&sni=evil.example'
     assert_eq 'hello%20%26%20%2B%2F%23%E2%98%83' "$(xvk_url_component 'hello & +/#☃')" 'UTF-8 values encode as URL components'
+    jq '.ipv6=true | .endpoint="2001:db8::1"' "$scratch/state.json" > "$scratch/state-v6.json"
+    chmod 600 "$scratch/state-v6.json"
+    assert_success 'state with ipv6 passes the schema' xvk_state_validate "$scratch/state-v6.json"
+    # Xray (Go) turns the wildcard 0.0.0.0 into one dual-stack socket, so the flag leaves the listener alone.
+    xvk_render_server "$scratch/state-v6.json" > "$scratch/config-v6.json"
+    assert_success 'the ipv6 flag does not change the rendered config' cmp -s "$scratch/config.json" "$scratch/config-v6.json"
+    uri6=$(xvk_render_uri "$scratch/state-v6.json" test-device)
+    assert_success 'IPv6 URI carries the bracketed address and port' grep -q -F '@[2001:db8::1]:443?' <<< "$uri6"
+    assert_eq 2001:db8::1 "$(xvk_render_profile "$scratch/state-v6.json" test-device chrome singbox | jq -r .server)" 'sing-box profile keeps the bare IPv6 address'
+    assert_success 'clash profile keeps the bare IPv6 address' grep -q -F 'server: "2001:db8::1"' <<< "$(xvk_render_profile "$scratch/state-v6.json" test-device chrome clash)"
+    jq '.ipv6="yes"' "$scratch/state.json" > "$scratch/state-badv6.json"; chmod 600 "$scratch/state-badv6.json"
+    assert_failure 'non-boolean ipv6 is rejected' xvk_state_validate "$scratch/state-badv6.json"
     assert_success 'routing uses explicit IP blocks, no geo-data' jq -e '.routing.domainStrategy == "IPOnDemand" and (.routing.rules[0].ip | index("169.254.0.0/16") != null) and .inbounds[0].sniffing.enabled == false' "$scratch/config.json"
     for client_count in 0 2; do
         if [[ $client_count == 0 ]]; then

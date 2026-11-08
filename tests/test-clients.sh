@@ -45,6 +45,21 @@ if [[ $selected != failed-add-and-remove && $selected != concurrent-mutations ]]
     assert_success 'revoked UUID and shortId absent from config' jq -e --arg uuid "$phone_uuid" --arg sid "$phone_sid" \
         '[..|strings]|index($uuid)==null and index($sid)==null' "$config"
     assert_failure 'removed profile is no longer exportable' bash "$manager" show phone
+    # IPv6 switch: state flag and listener move together, clients and the generation survive.
+    generation=$(jq .generation "$state")
+    config_before=$(sha256sum < "$config")
+    assert_success 'ipv6 on commits' bash "$manager" ipv6 on
+    assert_eq "$config_before" "$(sha256sum < "$config")" 'ipv6 on leaves the rendered config byte-identical'
+    assert_eq true "$(jq -r .ipv6 "$state")" 'ipv6 on records the flag in the state'
+    assert_eq "$((generation + 1))" "$(jq .generation "$state")" 'ipv6 on advances the generation once'
+    assert_failure 'ipv6 on twice is refused' bash "$manager" ipv6 on
+    assert_success 'a client can be added while dual stack' bash "$manager" add v6client
+    assert_eq 'main-user,tablet,v6client' "$(bash "$manager" list | LC_ALL=C sort | paste -sd ,)" 'clients survive the switch'
+    assert_success 'ipv6 off commits' bash "$manager" ipv6 off
+    assert_eq null "$(jq '.ipv6' "$state")" 'ipv6 off removes the flag'
+    assert_failure 'ipv6 off twice is refused' bash "$manager" ipv6 off
+    assert_failure 'ipv6 needs on or off' bash "$manager" ipv6 maybe
+    bash "$manager" remove v6client
 fi
 if [[ $selected != add-list-show-remove && $selected != concurrent-mutations ]]; then
     before=$(sha256sum "$state")

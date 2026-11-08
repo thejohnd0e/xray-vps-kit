@@ -31,6 +31,16 @@ if [[ $selected != malicious-and-missing-inputs ]]; then
         assert_success "valid ASCII host $host" xvk_validate_host "$host"
     done
     assert_success 'valid target keeps independent port' xvk_validate_target github.com:443
+    for address in 2001:db8::1 ::1 :: fe80::1 2001:0db8:0000:0000:0000:0000:0000:0001 1:2:3:4:5:6:7:8 ::ffff 1::; do
+        assert_success "valid IPv6 literal $address" xvk_validate_ipv6 "$address"
+        assert_success "IPv6 literal $address is a valid endpoint" xvk_validate_endpoint "$address"
+    done
+    for address in '' : ::: 1:2:3:4:5:6:7 1:2:3:4:5:6:7:8:9 1::2::3 12345::1 g::1 :1:2:3:4:5:6:7 1:2:3:4:5:6:7: 2001:db8::1/64 '[2001:db8::1]' 1.2.3.4 'a b::1'; do
+        assert_failure "invalid IPv6 literal '$address'" xvk_validate_ipv6 "$address"
+    done
+    assert_success 'DNS name is a valid endpoint' xvk_validate_endpoint vpn.example.com
+    assert_failure 'IPv6 literal is not a valid SNI or target host' xvk_validate_host 2001:db8::1
+    assert_failure 'bracketed IPv6 is not a valid endpoint' xvk_validate_endpoint '[2001:db8::1]'
     assert_success 'name boundary accepted' xvk_validate_name A1234567890123456789012345678901
     assert_success 'email-style name accepted' xvk_validate_name user@example.com
     assert_success 'valid schema accepted' xvk_state_validate "$scratch/state.json"

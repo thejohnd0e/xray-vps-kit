@@ -47,14 +47,19 @@ xvk_client_mutate() {
 xvk_client_mutate_locked() (
     set -euo pipefail
     local root=${1%/} operation=${2:-} name=${3:-}
-    local cfg stage='' client bundle core firewall
+    local cfg stage='' client bundle core firewall old_firewall added6=false
     cfg="${root%/}/etc/xray-vps-kit"
     # Reads the dynamically scoped locals at EXIT; only the exact stage path
     # this invocation created is ever removed.
     trap 'if [[ -n ${stage:-} && $stage == "$cfg"/.stage.* ]]; then rm -rf -- "$stage"; fi' EXIT
     xvk_client_require_install "$root" || exit 1
-    xvk_validate_name "$name" || { xvk_error 'Invalid client name'; exit 1; }
+    case $operation in ipv6on|ipv6off) ;; *) xvk_validate_name "$name" || { xvk_error 'Invalid client name'; exit 1; } ;; esac
     case $operation in
+        ipv6on)
+            if [[ $(jq -r '.ipv6 // false' "$cfg/state.json") == true ]]; then xvk_error 'IPv6 is already enabled'; exit 1; fi
+            [[ -n $root ]] || xvk_ipv6_available || exit 1 ;;
+        ipv6off)
+            if [[ $(jq -r '.ipv6 // false' "$cfg/state.json") != true ]]; then xvk_error 'IPv6 is already disabled'; exit 1; fi ;;
         add)
             if jq -e --arg name "$name" 'any(.clients[]; .name==$name)' "$cfg/state.json" > /dev/null; then
                 xvk_error 'Client name already exists'; exit 1
@@ -85,6 +90,10 @@ xvk_client_mutate_locked() (
         remove)
             jq --arg name "$name" '.generation+=1 | .clients |= map(select(.name!=$name))' \
                 "$cfg/state.json" > "$stage/etc/xray-vps-kit/state.json" || exit 1 ;;
+        ipv6on)
+            jq '.generation+=1 | .ipv6=true' "$cfg/state.json" > "$stage/etc/xray-vps-kit/state.json" || exit 1 ;;
+        ipv6off)
+            jq '.generation+=1 | del(.ipv6)' "$cfg/state.json" > "$stage/etc/xray-vps-kit/state.json" || exit 1 ;;
     esac
     chmod 600 "$stage/etc/xray-vps-kit/state.json" || exit 1
     xvk_render_server "$stage/etc/xray-vps-kit/state.json" > "$stage/etc/xray-vps-kit/config.json" || exit 1
@@ -100,10 +109,34 @@ xvk_client_mutate_locked() (
     ln -s -- "$bundle" "$stage/opt/xray-vps-kit/current" || exit 1
     xvk_core_link_sync "$root" "$stage" || exit 1
     firewall=$(jq -c .firewallRule "$cfg/ownership.json") || exit 1
+    old_firewall=$firewall
+    if [[ $operation == ipv6on && -z $root ]]; then
+        # The IPv6 allow rule goes in first so the listener never runs unreachable; it is taken
+        # out again if the transaction fails. The first output line says whether it was added.
+        firewall=$(xvk_firewall_open_ipv6 "$(jq -r .port "$cfg/state.json")" "$firewall") || exit 1
+        added6=${firewall%%$'\n'*}
+        firewall=${firewall#*$'\n'}
+        [[ $added6 == added ]] && added6=true || added6=false
+    fi
     xvk_ownership_manifest "$stage" "$root" "$firewall" > "$stage/etc/xray-vps-kit/ownership.json" || exit 1
     chmod 600 "$stage/etc/xray-vps-kit/ownership.json" || exit 1
-    xvk_transaction_apply "$root" "$stage" xvk_service_hook
+    if ! xvk_transaction_apply "$root" "$stage" xvk_service_hook; then
+        if [[ $added6 == true ]]; then
+            xvk_firewall_remove "$firewall" 6 > /dev/null 2>&1 || xvk_error 'IPv6 firewall rule left behind; remove it with ufw'
+        fi
+        exit 1
+    fi
+    if [[ $operation == ipv6off && -z $root ]]; then
+        xvk_firewall_remove "$old_firewall" 6 || xvk_error 'IPv6 listener disabled; the owned IPv6 firewall rule could not be removed safely'
+    fi
 )
+
+# xray-client ipv6 on|off: switch the listener between IPv4-only and dual stack.
+xvk_client_ipv6() {
+    local root=${1%/} mode=${2:-}
+    case $mode in on) mode=ipv6on ;; off) mode=ipv6off ;; *) xvk_error 'Use: xray-client ipv6 on|off'; return 1 ;; esac
+    xvk_client_mutate "$root" "$mode" ''
+}
 
 # Undo a change that was killed half way (power loss, SIGKILL): restores the snapshot
 # taken before it started. Does nothing when no change is pending.

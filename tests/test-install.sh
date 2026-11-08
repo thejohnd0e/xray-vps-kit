@@ -57,6 +57,14 @@ if [[ $selected == all || $selected == sandbox-and-restore ]]; then
         bash "$PROJECT_DIR/install.sh" --non-interactive --no-service --root "$root_fp" --endpoint 203.0.113.7 --fp firefox --archive "$archive"
     assert_failure 'repeat ordinary install refuses state' \
         bash "$PROJECT_DIR/install.sh" --non-interactive --no-service --root "$root" --endpoint 203.0.113.7 --archive "$archive"
+    root_v6=$(mktemp -d "$scratch/root.XXXXXXXX")
+    assert_success 'installer accepts --ipv6 with an IPv6 endpoint'         bash "$PROJECT_DIR/install.sh" --non-interactive --no-service --root "$root_v6" --endpoint 2001:db8::7 --ipv6 --archive "$archive"
+    assert_eq true "$(jq -r .ipv6 "$root_v6/etc/xray-vps-kit/state.json")" '--ipv6 is recorded in the state'
+    assert_eq 2001:db8::7 "$(jq -r .endpoint "$root_v6/etc/xray-vps-kit/state.json")" 'the IPv6 endpoint is stored bare'
+    uri_v6=$(bash "$root_v6/usr/local/bin/xray-client" show main-user | grep '^vless://')
+    assert_success 'the first client URI brackets the IPv6 endpoint' grep -q -F '@[2001:db8::7]:443?' <<< "$uri_v6"
+    assert_failure 'a bracketed endpoint is refused'         bash "$PROJECT_DIR/install.sh" --non-interactive --no-service --root "$(mktemp -d "$scratch/root.XXXXXXXX")" --endpoint '[2001:db8::7]' --archive "$archive"
+    assert_eq null "$(jq '.ipv6' "$root/etc/xray-vps-kit/state.json")" 'a default install has no ipv6 flag'
     root_empty=$(mktemp -d "$scratch/root.XXXXXXXX")
     assert_success 'explicit no-first-client creates no identities' \
         bash "$PROJECT_DIR/install.sh" --non-interactive --no-service --root "$root_empty" --endpoint 203.0.113.7 --no-first-client --port 8443 --archive "$archive"
@@ -164,6 +172,68 @@ if [[ $selected == all || $selected == preflight-and-start-failure || $selected 
         assert_success 'rule is appended when UFW refuses position 1' xvk_ufw_add_allow 443 xray-vps-kit-0123456789abcdef
         assert_eq 'insert allow' "$(tr '\n' ' ' < "$fixture_ufw_calls" | sed 's/ $//')" 'append follows the refused insert'
         unset -f ufw
+    }
+    {
+        # Dual-stack firewall rows: a file-backed UFW (one row per line, numbered on output) with
+        # iptables/ip6tables answering from the same rows.
+        fixture_rows="$scratch/ufw6-rows"
+        : > "$fixture_rows"
+        printf 'IPV6=yes\n' > "$scratch/ufw-defaults"
+        export XVK_UFW_DEFAULTS="$scratch/ufw-defaults"
+        # shellcheck disable=SC2317,SC2329
+        ufw() {
+            local argument marker='' six=false
+            case $1 in
+                status)
+                    if [[ ${2:-} == numbered ]]; then awk '{printf "[%2d] %s\n", NR, $0}' "$fixture_rows"
+                    elif [[ ${2:-} == verbose ]]; then printf 'Status: active\nDefault: deny (incoming), allow (outgoing)\n'
+                    else printf 'Status: active\n'; fi ;;
+                insert|allow)
+                    for argument in "$@"; do
+                        [[ $marker != next ]] || marker=$argument
+                        [[ $argument != comment ]] || marker=next
+                        [[ $argument != '::/0' ]] || six=true
+                    done
+                    if [[ $six == true ]]; then
+                        printf '443/tcp (v6)                ALLOW IN    Anywhere (v6)              # %s\n' "$marker" >> "$fixture_rows"
+                    else
+                        printf '443/tcp                     ALLOW IN    Anywhere                   # %s\n' "$marker" >> "$fixture_rows"
+                    fi ;;
+                --force) sed -i "${3}d" "$fixture_rows" ;;
+                *) return 1 ;;
+            esac
+        }
+        # shellcheck disable=SC2317,SC2329
+        iptables() { if grep -q 'ALLOW IN    Anywhere  ' "$fixture_rows"; then printf -- '-A ufw-user-input -p tcp -m tcp --dport 443 -j ACCEPT\n'; fi; }
+        # shellcheck disable=SC2317,SC2329
+        ip6tables() { if grep -q '(v6)  ' "$fixture_rows"; then printf -- '-A ufw6-user-input -p tcp -m tcp --dport 443 -j ACCEPT\n'; fi; }
+        XVK_FIREWALL=ufw
+        record=$(xvk_firewall_open 443 true)
+        assert_eq 2 "$(wc -l < "$fixture_rows")" 'dual-stack open adds an IPv4 and an IPv6 row'
+        assert_eq 1 "$(grep -c '(v6)' "$fixture_rows")" 'exactly one row is IPv6'
+        assert_eq 1 "$(jq -r '.marker' <<< "$record" | grep -c '^xray-vps-kit-[a-f0-9]\{16\}$')" 'one record owns both rows'
+        assert_success 'dual-stack removal deletes both owned rows' xvk_firewall_remove "$record"
+        assert_eq 0 "$(wc -l < "$fixture_rows")" 'no owned row is left'
+        record=$(xvk_firewall_open 443 false)
+        assert_eq 1 "$(wc -l < "$fixture_rows")" 'IPv4-only open adds one row'
+        answer=$(xvk_firewall_open_ipv6 443 "$record")
+        assert_eq added "$(head -1 <<< "$answer")" 'enabling IPv6 on an installed kit adds the IPv6 row'
+        assert_eq "$record" "$(tail -1 <<< "$answer")" 'the existing record keeps its marker'
+        assert_eq 2 "$(wc -l < "$fixture_rows")" 'rows are IPv4 plus IPv6 now'
+        answer=$(xvk_firewall_open_ipv6 443 "$record")
+        assert_eq kept "$(head -1 <<< "$answer")" 'a second enable adds nothing'
+        assert_success 'IPv6-only removal succeeds' xvk_firewall_remove "$record" 6
+        assert_eq 1 "$(wc -l < "$fixture_rows")" 'only the IPv4 row remains'
+        assert_eq 0 "$(grep -c '(v6)' "$fixture_rows")" 'the IPv6 row is gone'
+        xvk_firewall_open_ipv6 443 "$record" > /dev/null
+        sed -i 's/Anywhere (v6) /192.0.2.1 (v6)/' "$fixture_rows"
+        assert_failure 'a tampered IPv6 row blocks the whole removal' xvk_firewall_remove "$record"
+        assert_eq 2 "$(wc -l < "$fixture_rows")" 'nothing is deleted when one row was changed'
+        : > "$fixture_rows"
+        printf 'IPV6=no\n' > "$scratch/ufw-defaults"
+        assert_failure 'UFW with IPV6=no refuses a dual-stack open' xvk_firewall_open 443 true
+        unset -f ufw iptables ip6tables
+        unset XVK_UFW_DEFAULTS XVK_FIREWALL
     }
     {
         # Callbacks receive the normalized prefix from transaction.sh: the
