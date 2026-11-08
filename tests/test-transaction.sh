@@ -247,3 +247,48 @@ if [[ $selected != serialized-success ]]; then
     xvk_with_lock "$root/run/lock/xray-vps-kit.lock" run_writer "$root" second
     assert_success 'snapshot pruning preserves unexpected user files' test -f "$root/etc/xray-vps-kit/backups/$previous/foreign.txt"
 fi
+
+if [[ $selected == all || $selected == injected-failures ]]; then
+    # The apply process is killed (SIGKILL) while files of two generations coexist.
+    crash_hook() {
+        if [[ $1 == activate ]]; then kill -9 "$BASHPID"; fi
+        transaction_hook "$@"
+    }
+    root="$scratch/crash"
+    seed_root "$root"
+    before=$(xvk_ownership_manifest "$root" "$root")
+    bundle_before=$(readlink "$root/opt/xray-vps-kit/current")
+    stage=$(mktemp -d "$root/etc/xray-vps-kit/.stage.XXXXXXXX")
+    prepare_stage "$root" "$stage" crashed
+    prepare_upgrade "$root" "$stage"
+    assert_failure 'a killed change does not report success' xvk_with_lock "$root/run/lock/xray-vps-kit.lock" xvk_transaction_apply "$root" "$stage" crash_hook
+    assert_success 'a killed change leaves its journal behind' test -f "$root/etc/xray-vps-kit/transaction.journal"
+    assert_failure 'the half-applied files no longer verify' xvk_ownership_verify "$root" "$root"
+    assert_eq 0 "$(xvk_with_lock "$root/run/lock/xray-vps-kit.lock" xvk_transaction_recover "$scratch/none" transaction_hook > /dev/null 2>&1; echo $?)" 'recovery with no installation pending is a no-op'
+    status=0
+    xvk_with_lock "$root/run/lock/xray-vps-kit.lock" xvk_transaction_recover "$root" transaction_hook || status=$?
+    assert_eq 10 "$status" 'recovery reports that it rolled the change back'
+    assert_eq "$before" "$(xvk_ownership_manifest "$root" "$root")" 'recovery restores the exact previous bytes and modes'
+    assert_eq "$bundle_before" "$(readlink "$root/opt/xray-vps-kit/current")" 'recovery restores the selected bundle'
+    assert_success 'recovered installation verifies again' xvk_ownership_verify "$root" "$root"
+    assert_failure 'recovery removes the journal' test -e "$root/etc/xray-vps-kit/transaction.journal"
+    status=0
+    xvk_with_lock "$root/run/lock/xray-vps-kit.lock" xvk_transaction_recover "$root" transaction_hook || status=$?
+    assert_eq 0 "$status" 'a second recovery finds nothing to do'
+    # A later change finds the leftovers of a crash and undoes them first.
+    stage=$(mktemp -d "$root/etc/xray-vps-kit/.stage.XXXXXXXX")
+    prepare_stage "$root" "$stage" crashed-again
+    prepare_upgrade "$root" "$stage"
+    xvk_with_lock "$root/run/lock/xray-vps-kit.lock" xvk_transaction_apply "$root" "$stage" crash_hook || true
+    stage=$(mktemp -d "$root/etc/xray-vps-kit/.stage.XXXXXXXX")
+    prepare_stage "$root" "$stage" next
+    assert_failure 'the next change first rolls back the interrupted one and stops' xvk_with_lock "$root/run/lock/xray-vps-kit.lock" xvk_transaction_apply "$root" "$stage" transaction_hook
+    assert_eq "$before" "$(xvk_ownership_manifest "$root" "$root")" 'the interrupted change was undone by the next operation'
+    assert_failure 'no journal remains after that recovery' test -e "$root/etc/xray-vps-kit/transaction.journal"
+    printf 'not json\n' > "$root/etc/xray-vps-kit/transaction.journal"
+    chmod 600 "$root/etc/xray-vps-kit/transaction.journal"
+    status=0
+    xvk_with_lock "$root/run/lock/xray-vps-kit.lock" xvk_transaction_recover "$root" transaction_hook 2> /dev/null || status=$?
+    assert_failure 'an unreadable journal demands operator recovery' test "$status" -eq 0 -o "$status" -eq 10
+    assert_success 'an unreadable journal is kept for inspection' test -f "$root/etc/xray-vps-kit/transaction.journal"
+fi

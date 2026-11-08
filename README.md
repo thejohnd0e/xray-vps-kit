@@ -76,7 +76,11 @@ curl -fsSL https://raw.githubusercontent.com/thejohnd0e/xray-vps-kit/master/auto
 This installs a separate, self-contained worker and one owned file,
 `/etc/cron.d/xray-vps-kit-auto-update`. It checks the official stable
 [`XTLS/Xray-core` releases](https://github.com/XTLS/Xray-core/releases) every day at
-**03:30 in the server's local time** and installs only a newer version. Enabling schedules
+**03:MM in the server's local time** (MM is a minute picked at random once, when the job is
+created, so that servers do not all contact GitHub at the same moment) and installs only a
+newer version, and only once that release is at least three days old, so that a regression
+found right after publication does not reach every server at once. `run` skips that wait.
+Enabling schedules
 the job; it does not immediately update. If needed, enabling visibly installs prerequisites
 and starts/enables the system cron service. Other cron jobs are not edited.
 
@@ -200,6 +204,7 @@ xray-client show <name> [--fp FP]        # print the URI + QR code of an existin
 xray-client export <name> --output FILE [--fp FP]  # URI only, to a new file with mode 0600
 xray-client remove <name>                # revoke a client
 xray-client doctor                       # health report (never prints keys, UUIDs or URIs)
+xray-client recover                      # undo a change cut short by a crash or power loss
 xray-client version                      # kit and Xray-core versions
 ```
 
@@ -232,6 +237,11 @@ systemctl status xray-vps-kit
 journalctl -u xray-vps-kit -n 30 --no-pager   # if it does not start
 xray-client doctor
 ```
+
+A change (client add/remove, update) first writes a small journal and a snapshot of the previous
+files. If the process is killed or the server loses power half way, the next change refuses to
+continue before it has put that snapshot back; `xray-client recover` does the same on demand, and
+`doctor` reports a pending journal. Rollback after an ordinary failure works as before.
 
 `doctor` checks the server side only. It verifies the installed state, the ownership
 manifest against the installed files, that the rendered config matches the installed state,
@@ -295,6 +305,12 @@ config, keys and backups. Anything it cannot prove it created is left alone, and
 refused if installed files were modified. The `xray-vps-kit` user, installed apt packages and the
 downloaded kit copy `/opt/xray-vps-kit-src` are left in place (`rm -rf /opt/xray-vps-kit-src` removes it).
 
+`--purge-preserved` deletes what an earlier `--keep-config` kept (keys, client identities, backups);
+it asks for confirmation, refuses while the kit is installed and cannot be undone.
+
+If GitHub cannot be reached, the piped command above does not fail: it uses the copy of the same
+code that was installed with the kit (add `--yes`, because stdin is the script itself).
+
 ## Privacy and secrets
 
 - A client URI contains the client's UUID and the server's REALITY public key. Treat it as
@@ -357,7 +373,7 @@ are written down in [docs/transport-extension.md](docs/transport-extension.md).
 Pure Bash plus `jq`, no build step. Python 3 is used only by test helpers.
 
 ```bash
-bash tests/run.sh --suite validation      # also: harness release render transaction install
+bash tests/run.sh --suite validation      # also: harness block-ping release render transaction install
                                           #       clients export-doctor update uninstall coexistence docs
 sudo bash tests/run.sh --suite e2e        # real REALITY traffic; root + netns, use a disposable VM
 bash tests/run.sh --suite docs            # README commands, flags, links, claims

@@ -7,7 +7,7 @@ for module in common state render ownership transaction service clients diagnost
 done
 
 usage() {
-    printf 'Usage: xray-client help|version|add NAME|list|show NAME|export NAME --output FILE|remove NAME|doctor\n'
+    printf 'Usage: xray-client help|version|add NAME|list|show NAME|export NAME --output FILE|remove NAME|doctor|recover\n'
 }
 
 help_text() {
@@ -21,6 +21,7 @@ xray-client: manage VLESS + REALITY clients (run as root)
                                           write the URI to FILE (mode 0600)
   xray-client remove NAME                 revoke a client; that device disconnects
   xray-client doctor                      health report (never prints keys, UUIDs or URIs)
+  xray-client recover                     undo a change that was cut short by a crash or power loss
   xray-client version                     kit and Xray-core versions
   xray-client help                        this text
 
@@ -83,6 +84,10 @@ case ${1:-help} in
         parse_fp "${@:5}" || { usage >&2; exit 1; }
         root=$(management_root) || exit 1
         xvk_client_export "$root" "$2" "$4" "$fp" ;;
+    recover)
+        (( $# == 1 )) || { usage >&2; exit 1; }
+        root=$(management_root) || exit 1
+        xvk_client_recover "$root" ;;
     doctor)
         (( $# == 1 )) || { usage >&2; exit 1; }
         root=$(management_root) || exit 1

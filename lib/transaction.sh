@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # lock_fd is a dynamically scoped local inherited by the callback and its
 # nested subshell, never read after the with_lock subshell has exited.
-# shellcheck disable=SC2030,SC2031
+# shellcheck disable=SC2030,SC2031,SC2015
 
 xvk_with_lock() (
     set -euo pipefail
@@ -20,9 +20,52 @@ xvk_with_lock() (
     "$@"
 )
 
+# An in-flight change leaves a small journal naming the snapshot taken just before the
+# first file was replaced. If the process is killed or the host loses power half way,
+# files from two generations can coexist; the next locked operation (or
+# `xray-client recover`) puts the snapshot back before anything else is accepted.
+xvk_transaction_journal_write() {
+    local cfg=$1 snapshot=$2 temporary
+    temporary=$(xvk_private_temp "$cfg") || return 1
+    if ! jq -n --arg snapshot "$snapshot" '{schemaVersion:1,state:"applying",snapshot:$snapshot}' > "$temporary" ||
+        ! mv -fT -- "$temporary" "$cfg/transaction.journal"; then
+        rm -f -- "$temporary"; return 1
+    fi
+}
+
+# Needs the kit lock. Exit status: 0 nothing pending, 10 an interrupted change was
+# rolled back, anything else means operator recovery is still required.
+xvk_transaction_recover() (
+    set -euo pipefail
+    local root=${1%/} hook=$2 cfg journal snapshot directory
+    cfg="$root/etc/xray-vps-kit"
+    journal="$cfg/transaction.journal"
+    [[ -e $journal || -L $journal ]] || exit 0
+    local lib_dir
+    lib_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+    # shellcheck source=lib/snapshot.sh
+    source "$lib_dir/snapshot.sh" || exit 1
+    [[ $hook =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] && declare -F "$hook" > /dev/null || exit 1
+    xvk_private_file "$journal" && jq -e -s 'length==1 and (.[0] | type=="object" and keys==["schemaVersion","snapshot","state"]
+        and .schemaVersion==1 and .state=="applying" and (.snapshot|type=="string"))' "$journal" > /dev/null || {
+        xvk_error 'Transaction journal is unreadable; operator recovery required'; exit 1;
+    }
+    snapshot=$(jq -r .snapshot "$journal") || exit 1
+    [[ $snapshot =~ ^snapshot-[0-9]+-[a-f0-9]{16}$ ]] || { xvk_error 'Transaction journal names an invalid snapshot'; exit 1; }
+    directory="$cfg/backups/$snapshot"
+    xvk_no_symlink_path "$directory" && [[ -d $directory ]] || {
+        xvk_error 'Snapshot of the interrupted change is missing; operator recovery required'; exit 1;
+    }
+    xvk_snapshot_restore "$root" "$directory" && "$hook" restore "$directory" "$root" || {
+        xvk_error 'Rollback of the interrupted change failed; operator recovery required'; exit 1;
+    }
+    rm -f -- "$journal" || exit 1
+    exit 10
+)
+
 xvk_transaction_apply() (
     set -euo pipefail
-    local root=${1%/} stage=$2 hook=$3 cfg snapshot generation old_snapshot rel legacy_runtime apply_failed=false
+    local root=${1%/} stage=$2 hook=$3 cfg snapshot generation old_snapshot rel legacy_runtime recovery apply_failed=false
     cfg="$root/etc/xray-vps-kit"
     if [[ ! ${lock_fd:-} =~ ^[0-9]+$ ]] ||
         [[ $(readlink "/proc/self/fd/$lock_fd") != "$root/run/lock/xray-vps-kit.lock" ]] ||
@@ -32,6 +75,14 @@ xvk_transaction_apply() (
     [[ $hook =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] && declare -F "$hook" > /dev/null || exit 1
     [[ $stage == "$cfg"/.stage.* && -d $stage ]] && xvk_no_symlink_path "$stage" || exit 1
     [[ $(stat -c %u "$stage") == "$EUID" && $(stat -c %a "$stage") == 700 ]] || exit 1
+    # A previous change that was killed half way must be undone before this one is judged.
+    recovery=0
+    xvk_transaction_recover "$root" "$hook" || recovery=$?
+    case $recovery in
+        0) ;;
+        10) xvk_error 'An interrupted earlier change was rolled back; repeat the command'; exit 1 ;;
+        *) exit 1 ;;
+    esac
     local lib_dir
     lib_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
     # shellcheck source=lib/snapshot.sh
@@ -68,6 +119,7 @@ xvk_transaction_apply() (
     xvk_ownership_manifest "$stage" "$root" "$(jq -c .firewallRule "$stage/etc/xray-vps-kit/ownership.json")" > "$stage/new-ownership" || exit 1
     chmod 600 "$stage/new-ownership" || exit 1
     mv -fT "$stage/new-ownership" "$stage/etc/xray-vps-kit/ownership.json" || exit 1
+    xvk_transaction_journal_write "$cfg" "$snapshot" || exit 1
     while IFS= read -r rel; do
         if ! xvk_atomic_file_replace "$stage/$rel" "$root/$rel"; then
             apply_failed=true; break
@@ -90,12 +142,14 @@ xvk_transaction_apply() (
     fi
     if [[ $apply_failed == true ]]; then
         if xvk_snapshot_restore "$root" "$cfg/backups/$snapshot" && "$hook" restore "$stage" "$root"; then
+            rm -f -- "$cfg/transaction.journal" || xvk_error 'Could not remove the transaction journal'
             xvk_error 'Activation failed; previous files and selection restored'
         else
             xvk_error 'Activation failed; rollback failed; operator recovery required'
         fi
         exit 1
     fi
+    rm -f -- "$cfg/transaction.journal" || exit 1
     # Only a verified old snapshot may be pruned; preserve the newest known
     # good snapshot and every failed/in-flight backup for operator recovery.
     if [[ -n $old_snapshot && $old_snapshot != "$snapshot" ]]; then

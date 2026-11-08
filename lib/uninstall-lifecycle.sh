@@ -72,7 +72,14 @@ xvk_uninstall_snapshots() {
 }
 
 xvk_uninstall_confirm() {
-    local keep=$1 answer
+    local keep=$1 purge=${2:-false} answer
+    if [[ $purge == true ]]; then
+        printf 'This permanently deletes the configuration kept by --keep-config: keys, client identities\n' >&2
+        printf 'and backups. Those clients stop working for good and install.sh --restore is no longer possible.\n' >&2
+        printf 'Delete the preserved configuration? [y/N]: ' >&2
+        IFS= read -r answer || { xvk_error 'Purge canceled (EOF)'; return 1; }
+        case $answer in y|Y|yes|YES) return 0 ;; *) xvk_error 'Purge canceled'; return 1 ;; esac
+    fi
     printf 'This removes the xray-vps-kit service, launcher, code and owned firewall rule.\n' >&2
     if [[ $keep == true ]]; then
         printf 'State, config and backups are kept for install.sh --restore.\n' >&2
@@ -82,6 +89,30 @@ xvk_uninstall_confirm() {
     printf 'Proceed with uninstall? [y/N]: ' >&2
     IFS= read -r answer || { xvk_error 'Uninstall canceled (EOF)'; return 1; }
     case $answer in y|Y|yes|YES) ;; *) xvk_error 'Uninstall canceled'; return 1 ;; esac
+}
+
+# Removes what `uninstall --keep-config` left behind, once the runtime is gone. Only the
+# kit's own files and snapshots that prove to be intact are deleted.
+xvk_uninstall_purge_preserved() {
+    local root=${1%/} cfg name rel listing retained=false
+    local -a snapshots=()
+    cfg="$root/etc/xray-vps-kit"
+    xvk_no_symlink_path "$cfg" && [[ -f $cfg/state.json ]] || { xvk_error 'Nothing preserved to purge'; return 1; }
+    xvk_state_validate "$cfg/state.json" || { xvk_error 'Preserved state is invalid; refusing to delete it'; return 1; }
+    listing=$(xvk_uninstall_snapshots "$root") || return 1
+    [[ -z $listing ]] || mapfile -t snapshots <<< "$listing"
+    for name in "${snapshots[@]}"; do
+        xvk_snapshot_remove "$cfg/backups/$name" "$root" ||
+            { xvk_snapshot_intact "$cfg/backups/$name" && xvk_snapshot_remove_leaves "$cfg/backups/$name"; } ||
+            { xvk_error "Backup $name retained: cleanup guard refused"; retained=true; }
+    done
+    for rel in state.json config.json ownership.json transaction.journal; do
+        rm -f -- "$cfg/$rel" || return 1
+    done
+    rmdir -- "$cfg/backups" 2> /dev/null || [[ ! -e $cfg/backups ]] || retained=true
+    rmdir -- "$cfg" 2> /dev/null || retained=true
+    printf 'Preserved configuration deleted: identities, keys and backups are gone.\n'
+    [[ $retained != true ]] || { xvk_error 'Some entries were retained because they are not provably owned'; return 1; }
 }
 
 xvk_uninstall_locked() (
@@ -99,8 +130,15 @@ xvk_uninstall_locked() (
         ! -e $filesystem_root/usr/local/bin/xray-client && ! -e $filesystem_root/etc/systemd/system/xray-vps-kit.service &&
         ! -e $filesystem_root/usr/local/bin/xray && ! -L $filesystem_root/usr/local/bin/xray ]]; then
         xvk_auto_remove "$root" || exit 1
-        printf 'Kit runtime is already removed; preserved configuration was not touched.\n'
+        if [[ ${XVK_PURGE:-false} == true ]]; then
+            xvk_uninstall_purge_preserved "$root" || exit 1
+        else
+            printf 'Kit runtime is already removed; preserved configuration was not touched (delete it with --purge-preserved).\n'
+        fi
         exit 0
+    fi
+    if [[ ${XVK_PURGE:-false} == true ]]; then
+        xvk_error '--purge-preserved applies only after an earlier uninstall --keep-config'; exit 1
     fi
     xvk_uninstall_require_install "$root" || exit 1
     bundle=$(jq -r .installed.bundleId "$cfg/state.json") || exit 1
@@ -157,7 +195,7 @@ xvk_uninstall_run() {
     xvk_require_commands jq sha256sum realpath flock find || return 1
     [[ -d $filesystem_root/run/lock ]] || { xvk_error 'Missing lock directory'; return 1; }
     if [[ $XVK_ASSUME_YES != true ]]; then
-        xvk_uninstall_confirm "$XVK_KEEP" || return 1
+        xvk_uninstall_confirm "$XVK_KEEP" "${XVK_PURGE:-false}" || return 1
     fi
     xvk_with_lock "$filesystem_root/run/lock/xray-vps-kit.lock" \
         xvk_uninstall_locked "$root" "$XVK_KEEP" xvk_uninstall_hook

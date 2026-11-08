@@ -5,8 +5,7 @@ set -euo pipefail
 if [[ ! -f ${BASH_SOURCE[0]:-} || ! -f $(dirname -- "${BASH_SOURCE[0]:-/}")/lib/common.sh ]]; then
     src=${XVK_SRC:-/opt/xray-vps-kit-src}
     cd /
-    [[ -n ${XVK_SRC:-} || $EUID == 0 ]] || { printf 'error: run as root
-' >&2; exit 1; }
+    [[ -n ${XVK_SRC:-} || $EUID == 0 ]] || { printf 'error: run as root\n' >&2; exit 1; }
     bootstrap_packages=()
     command -v git > /dev/null 2>&1 || bootstrap_packages+=(git)
     [[ -s /etc/ssl/certs/ca-certificates.crt ]] || bootstrap_packages+=(ca-certificates)
@@ -41,11 +40,9 @@ if [[ ! -f ${BASH_SOURCE[0]:-} || ! -f $(dirname -- "${BASH_SOURCE[0]:-/}")/lib/
         fi
     fi
     if [[ -d $src/.git ]]; then
-        git -C "$src" pull --ff-only -q || { printf 'error: cannot fast-forward %s (local changes?)
-' "$src" >&2; exit 1; }
+        git -C "$src" pull --ff-only -q || { printf 'error: cannot fast-forward %s (local changes?)\n' "$src" >&2; exit 1; }
     elif [[ -e $src ]]; then
-        printf 'error: %s exists but is not a clone of the kit; move it away and run this again
-' "$src" >&2; exit 1
+        printf 'error: %s exists but is not a clone of the kit; move it away and run this again\n' "$src" >&2; exit 1
     else
         git clone -q "${XVK_REPO:-https://github.com/thejohnd0e/xray-vps-kit.git}" "$src"
     fi

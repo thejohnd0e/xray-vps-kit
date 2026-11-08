@@ -98,6 +98,21 @@ xvk_client_mutate_locked() (
     xvk_transaction_apply "$root" "$stage" xvk_service_hook
 )
 
+# Undo a change that was killed half way (power loss, SIGKILL): restores the snapshot
+# taken before it started. Does nothing when no change is pending.
+xvk_client_recover() {
+    local root=${1%/} status=0
+    xvk_client_require_install "$root" || return 1
+    XVK_LOCK_TIMEOUT=${XVK_LOCK_TIMEOUT:-60} xvk_with_lock "$root/run/lock/xray-vps-kit.lock"         xvk_transaction_recover "$root" xvk_service_hook || status=$?
+    case $status in
+        0) printf 'No interrupted change found.
+' ;;
+        10) printf 'An interrupted change was rolled back; the previous files and selection are restored.
+'; status=0 ;;
+    esac
+    return "$status"
+}
+
 xvk_client_add() {
     local root=${1%/} name=${2:-} cfg
     cfg="${root%/}/etc/xray-vps-kit"

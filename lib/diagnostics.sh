@@ -63,6 +63,9 @@ xvk_client_doctor() {
     }
     # Every probe runs inside a condition so a failed mandatory check records a
     # diagnostic instead of aborting the report under errexit/pipefail.
+    if [[ -e $cfg/transaction.journal || -L $cfg/transaction.journal ]]; then
+        check 'no interrupted change pending (run: xray-client recover)' 1
+    else check 'no interrupted change pending' 0; fi
     if xvk_client_require_install "$root" && xvk_ownership_verify "$root" "$root" 2> /dev/null; then
         check 'installed state and manifest' 0
     else check 'installed state and manifest' 1; fi

@@ -127,6 +127,20 @@ if [[ $selected == all || $selected == keep-restore-and-full-removal ]]; then
     assert_eq 'foreign tool' "$(cat "$root/usr/local/bin/other-tool")" 'foreign launcher directory file is untouched'
     assert_success 'second --keep-config run is a safe no-op' bash "$PROJECT_DIR/uninstall.sh" --root "$root" --yes --keep-config
 
+    purge_root=$(mktemp -d "$scratch/purge.XXXXXXXX")
+    install_test_root "$purge_root"
+    assert_failure '--purge-preserved cannot be combined with --keep-config' bash "$PROJECT_DIR/uninstall.sh" --root "$purge_root" --yes --keep-config --purge-preserved
+    assert_failure '--purge-preserved is refused while the kit is installed' bash "$PROJECT_DIR/uninstall.sh" --root "$purge_root" --yes --purge-preserved
+    assert_success 'installed kit survives the refused purge' test -L "$purge_root/opt/xray-vps-kit/current"
+    bash "$PROJECT_DIR/uninstall.sh" --root "$purge_root" --yes --keep-config > /dev/null
+    assert_failure 'purge without --yes and without a TTY changes nothing' bash "$PROJECT_DIR/uninstall.sh" --root "$purge_root" --purge-preserved < /dev/null
+    assert_success 'preserved state is still there after the refused purge' test -f "$purge_root/etc/xray-vps-kit/state.json"
+    assert_success 'plain repeated uninstall keeps the preserved configuration' bash "$PROJECT_DIR/uninstall.sh" --root "$purge_root" --yes
+    assert_success 'plain repeated uninstall leaves the state in place' test -f "$purge_root/etc/xray-vps-kit/state.json"
+    assert_success '--purge-preserved deletes what --keep-config kept' bash "$PROJECT_DIR/uninstall.sh" --root "$purge_root" --yes --purge-preserved
+    assert_failure 'nothing of the kit configuration remains after the purge' test -e "$purge_root/etc/xray-vps-kit"
+    assert_failure 'a second purge reports that nothing is preserved' bash "$PROJECT_DIR/uninstall.sh" --root "$purge_root" --yes --purge-preserved
+
     identity_before=$(jq -c 'del(.generation,.installed,.lastSuccessfulSnapshot)' "$cfg/state.json")
     cp -p "$cfg/config.json" "$scratch/config-before"
     assert_success 'install --restore recreates runtime resources' \
