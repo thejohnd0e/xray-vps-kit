@@ -1,5 +1,7 @@
 # Xray VPS Kit (кратко по-русски)
 
+[English](README.md) · **Русский**
+
 Установщик Xray-core (VLESS + REALITY + XTLS Vision, TCP 443) для VPS и команда `xray-client` для
 управления клиентами. Полная документация на английском: [README.md](README.md).
 
