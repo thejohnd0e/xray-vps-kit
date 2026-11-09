@@ -32,7 +32,7 @@ curl -fsSL https://raw.githubusercontent.com/thejohnd0e/xray-vps-kit/master/inst
 Скрипт при необходимости ставит `git` и зависимости, клонирует кит в `/opt/xray-vps-kit-src`, спрашивает
 порт и SNI (Enter — значения по умолчанию) и в конце печатает URI и QR-код первого клиента.
 Для автоматизации добавьте `--non-interactive`. Установить код конкретного тега или коммита:
-`... | XVK_REF=v0.1.2 bash -s -- ...`.
+`... | XVK_REF=v0.1.3 bash -s -- ...`.
 
 ## Клиенты
 
