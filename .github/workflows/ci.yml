@@ -12,7 +12,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Syntax check and ShellCheck
         run: bash tests/lint.sh
       - name: Bootstrap block is in sync
@@ -25,7 +25,7 @@ jobs:
       matrix:
         os: [ubuntu-22.04, ubuntu-24.04]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
@@ -56,7 +56,7 @@ jobs:
         run: |
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends             git ca-certificates jq curl unzip openssl qrencode zbar-tools iproute2 python3 util-linux procps
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Sandbox suites
         run: |
           for suite in harness block-ping validation release render transaction install clients export-doctor update uninstall coexistence docs packaging auto-update; do
