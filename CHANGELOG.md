@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.4
+
+- Pinned Xray-core moves from v26.10.31 to v26.11.9.
+
 ## 0.1.3
 
 - Pinned Xray-core moves from v26.10.21 to v26.10.31.

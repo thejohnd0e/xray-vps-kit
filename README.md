@@ -66,7 +66,7 @@ prints the first client's URI and QR code; to see them again later run `xray-cli
 For automation add `--non-interactive`.
 
 To install the code of a reviewed tag or commit instead of the newest `master`, set `XVK_REF`
-(for any of the one-line commands): `... | XVK_REF=v0.1.3 bash -s -- ...`. On other Debian/Ubuntu
+(for any of the one-line commands): `... | XVK_REF=v0.1.4 bash -s -- ...`. On other Debian/Ubuntu
 releases the OS check can be skipped with `XVK_ALLOW_UNSUPPORTED_OS=1`; nothing is tested there.
 See also [SECURITY.md](SECURITY.md) and [CHANGELOG.md](CHANGELOG.md). A Russian summary is in
 [README.ru.md](README.ru.md).

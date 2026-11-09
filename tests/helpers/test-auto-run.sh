@@ -46,9 +46,9 @@ xvk_https_get() {
     cp "$future" "$2" || return 1
     "$after_download"
 }
-make_release 26.10.40
+make_release 90.1.0
 assert_success 'explicit run discovers, verifies and installs a newer stable core' xvk_auto_run "$PROJECT_DIR" "$root" run
-assert_eq v26.10.40 "$(jq -r .installed.coreVersion "$root/etc/xray-vps-kit/state.json")" 'daily worker selects the discovered core'
+assert_eq v90.1.0 "$(jq -r .installed.coreVersion "$root/etc/xray-vps-kit/state.json")" 'daily worker selects the discovered core'
 assert_eq updated "$(jq -r .outcome "$root/var/lib/xray-vps-kit-auto-update/last-run.json")" 'last result records a successful update'
 before=$(sha256sum "$root/etc/xray-vps-kit/state.json")
 assert_success 'same-version check is a no-op' xvk_auto_run "$PROJECT_DIR" "$root" run
@@ -67,11 +67,11 @@ fetches=$(wc -l < "$fetch_trace")
 assert_success 'paused scheduled run exits without attempting an update' xvk_auto_run "$PROJECT_DIR" "$root" scheduled
 assert_eq "$fetches" "$(wc -l < "$fetch_trace")" 'paused job makes no API request'
 xvk_auto_disable_locked "$root" > /dev/null
-make_release 26.11.1
+make_release 90.2.0
 assert_success 'explicit run is allowed while scheduled updates are disabled' xvk_auto_run "$PROJECT_DIR" "$root" run
 assert_eq disabled "$(jq -r .mode "$root/var/lib/xray-vps-kit-auto-update/control.json")" 'manual run does not silently re-enable cron'
 xvk_auto_enable "$PROJECT_DIR" "$root" > /dev/null
-make_release 26.12.1
+make_release 90.3.0
 disable_during_fetch() { xvk_with_lock "$root/run/lock/xray-vps-kit.lock" xvk_auto_disable_locked "$root" > /dev/null; }
 after_fetch=disable_during_fetch
 before=$(sha256sum "$root/etc/xray-vps-kit/state.json")
@@ -85,13 +85,13 @@ assert_success 'apply lock rechecks eligibility after archive download too' xvk_
 assert_eq "$before" "$(sha256sum "$root/etc/xray-vps-kit/state.json")" 'disable after download prevents selection changes'
 after_download=:
 xvk_auto_enable "$PROJECT_DIR" "$root" > /dev/null
-make_release 26.12.2
+make_release 90.3.1
 jq '.assets[].digest="sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"' "$metadata" > "$scratch/bad-digest.json"
 mv "$scratch/bad-digest.json" "$metadata"
 before=$(sha256sum "$root/etc/xray-vps-kit/state.json")
 assert_failure 'advertised digest mismatch rejects the downloaded archive' xvk_auto_run "$PROJECT_DIR" "$root" run
 assert_eq "$before" "$(sha256sum "$root/etc/xray-vps-kit/state.json")" 'digest mismatch preserves the exact running state'
-make_release 26.12.9
+make_release 90.3.9
 jq '.published_at="2026-06-01T00:00:00Z"' "$metadata" > "$scratch/young.json" && mv "$scratch/young.json" "$metadata"
 before=$(sha256sum "$root/etc/xray-vps-kit/state.json")
 fetches=$(wc -l < "$fetch_trace")
@@ -100,7 +100,7 @@ XVK_AUTO_NOW=$young_now xvk_auto_run "$PROJECT_DIR" "$root" scheduled
 assert_eq "$((fetches + 1))" "$(wc -l < "$fetch_trace")" 'scheduled run still checks the release metadata'
 assert_eq "$before" "$(sha256sum "$root/etc/xray-vps-kit/state.json")" 'scheduled run leaves a release younger than three days alone'
 assert_eq skipped "$(jq -r .outcome "$root/var/lib/xray-vps-kit-auto-update/last-run.json")" 'a young release is recorded as skipped'
-make_release 27.1.1
+make_release 91.1.1
 remove_during_fetch() { bash "$PROJECT_DIR/uninstall.sh" --yes --root "$root" > /dev/null; }
 after_fetch=remove_during_fetch
 assert_success 'uninstall can win while a scheduled job is staging metadata' xvk_auto_run "$PROJECT_DIR" "$root" scheduled

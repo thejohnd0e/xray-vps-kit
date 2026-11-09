@@ -26,5 +26,5 @@ The one-line installers fetch the newest `master`. To install exactly the code o
 commit that you have reviewed, set `XVK_REF`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/thejohnd0e/xray-vps-kit/master/install.sh | XVK_REF=v0.1.3 bash
+curl -fsSL https://raw.githubusercontent.com/thejohnd0e/xray-vps-kit/master/install.sh | XVK_REF=v0.1.4 bash
 ```
