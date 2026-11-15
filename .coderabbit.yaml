@@ -1,0 +1,18 @@
+# CodeRabbit configuration. Reference: https://docs.coderabbit.ai/reference/configuration
+# Kept deliberately small: only what differs from the defaults.
+language: ru
+
+reviews:
+  high_level_summary: true
+  poem: false
+  in_progress_fortune: false
+  # Generated or agent-produced files: reviewing them adds noise, not findings.
+  path_filters:
+    - "!releases/**"
+    - "!docs/superpowers/**"
+  auto_review:
+    enabled: true
+    drafts: false
+
+chat:
+  auto_reply: true
