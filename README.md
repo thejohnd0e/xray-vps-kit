@@ -230,6 +230,7 @@ xray-client list --json                  # client names as JSON (no secrets)
 xray-client remove <name>                # revoke a client
 xray-client doctor [--probe-target] [--probe-reality]  # health report (never prints keys, UUIDs or URIs)
 xray-client ipv6 on|off                  # listen on IPv6 too (dual stack) or IPv4 only; restarts the service
+xray-client endpoint ADDR                # change the address written into client profiles after a server IP change (IPv4, IPv6 or DNS name); restarts the service
 xray-client recover                      # undo a change cut short by a crash or power loss
 xray-client version                      # kit and Xray-core versions
 ```

@@ -60,6 +60,27 @@ if [[ $selected != failed-add-and-remove && $selected != concurrent-mutations ]]
     assert_failure 'ipv6 off twice is refused' bash "$manager" ipv6 off
     assert_failure 'ipv6 needs on or off' bash "$manager" ipv6 maybe
     bash "$manager" remove v6client
+    # Endpoint change (new server IP): profiles follow, the server config and the identities do not.
+    generation=$(jq .generation "$state")
+    config_before=$(sha256sum < "$config")
+    tablet_before=$(jq -c '.clients[]|select(.name=="tablet")' "$state")
+    assert_success 'endpoint change commits' bash "$manager" endpoint 203.0.113.77
+    assert_eq 203.0.113.77 "$(jq -r .endpoint "$state")" 'endpoint is recorded in the state'
+    assert_eq "$config_before" "$(sha256sum < "$config")" 'endpoint change leaves the rendered config byte-identical'
+    assert_eq "$((generation + 1))" "$(jq .generation "$state")" 'endpoint change advances the generation once'
+    assert_eq "$tablet_before" "$(jq -c '.clients[]|select(.name=="tablet")' "$state")" 'endpoint change keeps client identities'
+    assert_success 'show prints the new address' bash -c "bash '$manager' show tablet | grep -q '@203.0.113.77:'"
+    assert_failure 'the same endpoint twice is refused' bash "$manager" endpoint 203.0.113.77
+    assert_failure 'an invalid endpoint is refused' bash "$manager" endpoint 'not an address!'
+    assert_failure 'a missing endpoint is refused' bash "$manager" endpoint
+    assert_eq 203.0.113.77 "$(jq -r .endpoint "$state")" 'refused changes leave the endpoint alone'
+    assert_success 'an IPv6 endpoint is accepted' bash "$manager" endpoint 2001:db8::9
+    assert_success 'an IPv6 endpoint is bracketed in the profile' bash -c "bash '$manager' show tablet | grep -q '@\[2001:db8::9\]:'"
+    assert_success 'a DNS endpoint is accepted' bash "$manager" endpoint vpn.example.net
+    # Sandbox doctor cannot pass as a whole (no live service); its integrity lines must stay ok.
+    bash "$manager" doctor > "$scratch/doctor-endpoint" 2>&1 || true
+    assert_success 'doctor still verifies state and manifest after an endpoint change' grep -q -F '[ok]   installed state and manifest' "$scratch/doctor-endpoint"
+    assert_success 'doctor still matches config to state after an endpoint change' grep -q -F '[ok]   configuration matches installed state' "$scratch/doctor-endpoint"
 fi
 if [[ $selected != add-list-show-remove && $selected != concurrent-mutations ]]; then
     before=$(sha256sum "$state")

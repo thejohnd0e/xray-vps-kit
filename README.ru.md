@@ -43,6 +43,7 @@ xray-client show NAME                 # показать URI и QR ещё раз
 xray-client remove NAME               # отозвать клиента
 xray-client ipv6 on|off              # правило UFW для IPv6 и проверка в doctor (сокет Xray и так dual-stack)
 xray-client doctor [--probe-reality]  # проверка сервера (ключи и URI не печатает); --probe-reality — пробное REALITY-соединение через временный клиент
+xray-client endpoint ADDR               # сменить адрес сервера в профилях клиентов после смены IP (IPv4, IPv6 или имя)
 xray-client recover                   # откатить изменение, прерванное сбоем или отключением питания
 ```
 

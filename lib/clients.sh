@@ -53,13 +53,17 @@ xvk_client_mutate_locked() (
     # this invocation created is ever removed.
     trap 'if [[ -n ${stage:-} && $stage == "$cfg"/.stage.* ]]; then rm -rf -- "$stage"; fi' EXIT
     xvk_client_require_install "$root" || exit 1
-    case $operation in ipv6on|ipv6off) ;; *) xvk_validate_name "$name" || { xvk_error 'Invalid client name'; exit 1; } ;; esac
+    case $operation in ipv6on|ipv6off|endpoint) ;; *) xvk_validate_name "$name" || { xvk_error 'Invalid client name'; exit 1; } ;; esac
     case $operation in
         ipv6on)
             if [[ $(jq -r '.ipv6 // false' "$cfg/state.json") == true ]]; then xvk_error 'IPv6 is already enabled'; exit 1; fi
             [[ -n $root ]] || xvk_ipv6_available || exit 1 ;;
         ipv6off)
             if [[ $(jq -r '.ipv6 // false' "$cfg/state.json") != true ]]; then xvk_error 'IPv6 is already disabled'; exit 1; fi ;;
+        endpoint)
+            # name carries the new address here; the server config does not contain it.
+            xvk_validate_endpoint "$name" || { xvk_error 'Invalid endpoint (IPv4, IPv6 or DNS name)'; exit 1; }
+            [[ $(jq -r .endpoint "$cfg/state.json") != "$name" ]] || { xvk_error 'Endpoint is already set to this address'; exit 1; } ;;
         add)
             if jq -e --arg name "$name" 'any(.clients[]; .name==$name)' "$cfg/state.json" > /dev/null; then
                 xvk_error 'Client name already exists'; exit 1
@@ -92,6 +96,8 @@ xvk_client_mutate_locked() (
                 "$cfg/state.json" > "$stage/etc/xray-vps-kit/state.json" || exit 1 ;;
         ipv6on)
             jq '.generation+=1 | .ipv6=true' "$cfg/state.json" > "$stage/etc/xray-vps-kit/state.json" || exit 1 ;;
+        endpoint)
+            jq --arg endpoint "$name" '.generation+=1 | .endpoint=$endpoint'                 "$cfg/state.json" > "$stage/etc/xray-vps-kit/state.json" || exit 1 ;;
         ipv6off)
             jq '.generation+=1 | del(.ipv6)' "$cfg/state.json" > "$stage/etc/xray-vps-kit/state.json" || exit 1 ;;
     esac
@@ -136,6 +142,14 @@ xvk_client_ipv6() {
     local root=${1%/} mode=${2:-}
     case $mode in on) mode=ipv6on ;; off) mode=ipv6off ;; *) xvk_error 'Use: xray-client ipv6 on|off'; return 1 ;; esac
     xvk_client_mutate "$root" "$mode" ''
+}
+
+# xray-client endpoint ADDR: change the address written into client profiles (IPv4, IPv6 or DNS
+# name) after the server got a new IP. The listener and the rendered server config do not change.
+xvk_client_endpoint() {
+    local root=${1%/} address=${2:-}
+    [[ -n $address ]] || { xvk_error 'Use: xray-client endpoint ADDR'; return 1; }
+    xvk_client_mutate "$root" endpoint "$address"
 }
 
 # Undo a change that was killed half way (power loss, SIGKILL): restores the snapshot

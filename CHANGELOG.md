@@ -8,6 +8,10 @@
 
 - Pinned Xray-core moves from v26.10.21 to v26.10.31.
 
+## Unreleased
+
+- `xray-client endpoint ADDR` changes the address written into client profiles after the server IP changes, through the normal transaction (state, ownership manifest and `doctor` stay consistent; no hand-editing of `state.json`). The server config is unchanged; the service restarts.
+
 ## 0.1.2
 
 - IPv6: `install.sh --ipv6` and `xray-client ipv6 on|off` manage the UFW IPv6 row (owned with the IPv4 one) and a doctor check; IPv6 endpoints in URIs are bracketed.
